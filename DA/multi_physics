@@ -1,0 +1,14 @@
+#!/bin/bash
+#possible choices of physics schemes:
+#adjacent lines mean paired parameters (cannot mix and match)
+BIN_MP_PHYSICS=(2 6 16)
+
+BIN_CU_PHYSICS=(0)
+
+BIN_RA_SW_PHYSICS=(1 3 99)
+BIN_RA_LW_PHYSICS=(1 3 99)
+
+BIN_BL_PBL_PHYSICS=(1 2 99)
+BIN_SF_SFCLAY_PHYSICS=(1 2 1)
+
+BIN_SF_SURFACE_PHYSICS=(1 2)

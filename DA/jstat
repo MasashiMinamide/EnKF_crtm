@@ -1,0 +1,71 @@
+#!/bin/bash
+. $WORK/DA/util.sh
+rundir=$1/run
+
+if [ ! -d $rundir ]; then echo "$rundir doesn't exist"; exit; fi
+
+for t in `ls $rundir |grep 20`; do
+  echo "==== `wrf_time_string $t` ===="
+  
+for c in obsproc wps real enkf perturb_ic update_bc wrf_ens wrf ; do
+  if [ -d $rundir/$t/$c ]; then
+     stat=`cat $rundir/$t/$c/stat`
+     printf "%10s" "$c"
+     case $stat in
+         waiting) echo -e "\e[7;33mwaiting\e[0m" ;;
+         running) echo -e "\e[7;32mrunning\e[0m" ;;
+         complete) echo -e "\e[7mcomplete\e[0m" ;;
+         error) echo -e "\e[7;31merror\e[0m" ;;
+     esac
+     if [[ $stat == "running" ]]; then
+       case $c in
+         wps)
+           echo "`cat $rundir/$t/$c/{geogrid,metgrid}.log |tail -n5`"
+           ;;
+         real)
+           echo "`tail -n5 $rundir/$t/$c/rsl.error.0000`"
+           ;;
+         wrf)
+           echo "`tail -n5 $rundir/$t/$c/rsl.error.0000`"
+           ;;
+         wrf_ENKF)
+           echo "`tail -n5 $rundir/$t/$c/rsl.error.0000`"
+           ;;
+         obsproc)
+           echo "`tail -n5 $rundir/$t/$c/obsproc.log`"
+           ;;
+         perturb_ic)
+           for m in `ls $rundir/$t/$c/$n |grep 0`; do
+             echo "$m (`tail -n1 $rundir/$t/$c/$n/$m/rsl.error.0000`)"
+           done
+           ;;
+         update_bc)
+           for m in `ls $rundir/$t/$c |grep 0`; do
+             echo "$m (`tail -n1 $rundir/$t/$c/$m/update_bc.log`)"
+           done
+           ;;
+         enkf)
+           if [ ! -f $rundir/$t/$c/d01/enkf.log ]; then
+             echo "preparing... "
+             ls -l $rundir/$t/$c/d01/fort.9*
+           else
+             echo "`tail -n5 $rundir/$t/$c/d01/enkf.log`"
+           fi
+           ;;
+         wrf_ens)
+           for m in `ls $rundir/$t/$c |grep 0`; do
+             rsltail=`tail -n1 $rundir/$t/$c/$m/rsl.error.0000`
+             if [[ -z $rsltail ]]; then mstat="\e[0;31mwaiting\e[0m"; fi
+             if [[ $rsltail ]]; then mstat="\e[0;32mrunning\e[0m: $rsltail"; fi
+             if [[ `echo $rsltail |grep SUCCESS` ]]; then mstat=complete; fi
+             echo -e "$m ($mstat)"
+           done
+           ;;
+       esac
+     fi
+  fi
+  done
+  echo ""
+done
+
+date
