@@ -137,6 +137,7 @@
  HROI_RADIANCE=300
  VROI=999
  VROI_RADAR=15
+ VROI_RADIANCE=30
 
 #WRFDA options (For generating perturbation)
  CV_OPTIONS=3
