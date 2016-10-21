@@ -37,17 +37,13 @@ for n in $domlist; do
   cp -L $WORK_DIR/fc/$PREVDATE/wrfinput_${dm}_`wrf_time_string $DATE` fort.`expr 80011 + $NUM_ENS`
   cp -L fort.`expr 80011 + $NUM_ENS` fort.`expr 90011 + $NUM_ENS` 
   cp -L fort.`expr 80011 + $NUM_ENS` fort.`expr 60011 + $NUM_ENS`
-  #cp -L fort.80011 fort.`expr 80011 + $NUM_ENS`
-  #cp -L fort.80011 fort.`expr 90011 + $NUM_ENS`
 
   ln -fs $WRF_DIR/run/LANDUSE.TBL .
   ln -fs $CRTM_DIR/crtm_wrf/coefficients .
-  ln -sf $CRTM_DIR/crtm_wrf/gt_lut .
   #Observations
   #LITTLE_R format from obsproc
   ln -fs $DATA_DIR/obs/${DATE:0:4}/obs_gts_`wrf_time_string $DATE`.3DVAR obs_3dvar_${DATE}00
   #airborne radar superobs
-  #ln -fs $DATA_DIR/so/2010/${DATE}_all.so_ass airborne_${DATE}_so
   ln -fs $DATA_DIR/so/${DATE:0:4}/${DATE}_all.so_ass airborne_${DATE}_so
   ln -fs $DATA_DIR/GOES/radiance_${dm}_${DATE}_so radiance_${DATE}_so
 
@@ -92,12 +88,6 @@ if $REPLACE_MEAN; then
       tid=0
       wait
     fi
-    #./replace_mean.exe $NUM_ENS >& replace_mean.log
-    #watch_log replace_mean.log Successful 1 $rundir
-    #for NE in `seq 1 $((NUM_ENS+1))`; do
-    #  mv fort.`expr 90010 + $NE` ../fort.`expr 80010 + $NE`
-    #  cp ../fort.`expr 80010 + $NE` ../fort.`expr 90010 + $NE` 
-    #done
     cd ../..
   done
 
@@ -111,7 +101,6 @@ if $REPLACE_MEAN; then
     done
     cd ../..
   done
- #fi
  fi
 fi
 
@@ -132,7 +121,6 @@ for n in $domlist; do
   fi
   cd ..
 done
-#wait
 
 #Check output
 for n in $domlist; do
@@ -176,7 +164,6 @@ if $REPLACE_MEAN; then
   for n in $domlist; do
     dm=d`expr $n + 100 |cut -c2-`
     cd $dm/replace_mean/
-    #./replace_mean.exe $NUM_ENS >& replace_mean.log
     watch_log replace_mean.log Successful 1 $rundir
     for NE in `seq 1 $((NUM_ENS+1))`; do
       mv fort.`expr 90010 + $NE` ../
