@@ -1,0 +1,105 @@
+PSU WRF EnKF system
+===================
+Authors:
+Control scripts: Michael Ying (yxy159@psu.edu). 
+                 Last updated 2014/08/10
+EnKF code:       Fuqing Zhang, Yonghui Weng, Michael Ying, Jon Poterjoy, Yunji Zhang.
+                 Last updated 2014/08/01
+
+--------------------
+File structure - Code:
+EnKF/                    - EnKF code
+config                   - configuration file: a collection of options for the experiment setup
+run.sh                   - top level run script
+module_*.sh              - components in the data assimilation system
+namelist_*.sh            - generates namelist input files
+util.sh                  - defines some common functions
+jstat                    - a monitor program to check job running status
+run_gen_be.sh, gen_be/   - helps create WRF runs needed for gen_be calculation with NMC method 
+                           (creates be.dat for WRFDA). gen_be/ scripts have been modified on top
+                           of the version provided in WRFDA.
+linint_time_ncfile.ncl   - interpolates netcdf formatted files in time, currently only used for 
+                           interpolating wrflowinp_ files for shorter time windows.
+multi_physics            - defines the grouped physics options. When running multi-physics ensemble, 
+                           the scripts randomly picks options from these groups.
+
+The experiment output dir: $WORK_DIR/$EXP
+rc/                - IC BC from WPS, initialized with first guess
+fc/                - initial perturbations, member wrfouts
+run/               - runtime work dir for each component
+output/            - results from WRF forecast/deterministic runs
+obs/               - observations files processed with obsproc
+
+---------------------
+Installation tips:
+
+1. modify config file to specify your options.
+   change $WORK to the path you store file. $WORK/DA is the location of this script set.
+   follow the README.config to setup the options accordingly.
+
+2. in namelist_wrf.sh you can add in extra options
+
+3. The first guess used to initialize IC BC in WPS
+   modify module_wps.sh "link first guess" section, for the naming of fnl files (of course other files may be used, as long as ungrib.exe knows how to decode them)
+
+4. For observations being assimilated in EnKF.
+   modify module_obsproc.sh if necessary for the naming of (extra) observation data files
+   modify module_enkf.sh    if necessary for linking these observation files.
+
+5. For the initial perturbation used for EnKF
+   module_perturb_ic.sh generates random perturbation using WRF 3DVAR
+   using CV_OPTIONS=5 or 6, a be.dat file is needed. gen_be_wrapper.sh can be used to calculate be.dat from a month-long 12,24h forecasts (the NMC method). 
+   To prepare wrfout files for gen_be:
+     1.  Make a copy of your config file to config_be
+         change the WORK_DIR to WORK_DIR/be
+                    RUN_ENKF=false
+                    MAX_DOM=1
+         and redefine DATE_START/END, CYCLE_PERIOD and FORECAST_MINUTES
+         to setup a long term WRF simulation of your current outermost domain.
+         set DATE_CYCLE_START = DATE_START + CYCLE_PERIOD
+         set wrf_ntasks = total_ntasks
+     2.  Change the CONFIG_FILE in your run.sh to config_be and submit run.sh to batch system. 
+         This will create the wrfout files required for gen_be. 
+     3.  Once you have the runs complete, change CONFIG_FILE in run_gen_be.sh to config_be and submit the job
+         This creates the be.dat file. 
+         Note that the location of the be.dat should be $WORK_DIR/be and thus should be specified to BE_DIR for following experiments to utilize this be.dat file for ensemble perturbation.
+
+
+---------------------
+running the Katrina test case:
+
+1. untar the katrinaTestData.tar and gunzip the inner data files.
+   untar the DA.tar.gz
+   untar the enkf.tar.gz and compile the code in src using the Makefile
+
+2. in run.sh
+   modify the header with your batch system header, currently there are stampede (SLURM) and jet (PBS) headers for reference
+   modify the total_ntasks part, make sure total_ntasks will have the correct value (total number of procs)
+
+3. in config 
+   change the directories section to your system paths
+   everything else are setup for a simple nested run. You can leave it as is for the first time you run the system but feel free to change things and experiment
+
+4. in job_submit.sh
+   add your own batch system mpiexec command, currently the stampede and jet systems are supported
+
+5. run the test case by submitting run.sh
+
+6. there shall be standard/error output for the job from the batch system. 
+   "jstat $WORK_DIR" will give a more structured monitor of progress
+
+---------------------------------------
+About CPU assignment and usage:
+
+WRF runs for members and forecast (N+1)*wrf_ntasks required
+for WRF, all cpus on a node are utilized: wrf_ppn=HOSTPPN
+if the batch submit script specifies nprocs=(N+1)*wrf_ntasks, then all runs will complete at the same time.
+if nprocs is smaller, the runs will complete in more than one batchs.
+
+For EnKF, because of larger memory demand, we need to use smaller ppn, total procs needed for EnKF
+is NMCPU*NICPU*NJCPU and is usually set to (N+1)*1*1 (no domain decomposition)
+if nprocs is set to (N+1)*HOSTPPN, then on each node we can just use 1 cpu: enkf_ppn=1; and span all EnKF job cpus
+throughout the nodes allocated. However, if EnKF is run for multiple domains, we can increase enkf_ppn
+so that several EnKF can be run simultaneously with each EnKF run only spanning part of the allocated nodes.
+
+
