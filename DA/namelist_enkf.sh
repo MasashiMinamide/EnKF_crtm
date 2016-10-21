@@ -153,15 +153,8 @@ vroi_airborne     = $VROI_RADAR,
 
 &radiance 
 use_radiance  = .$USE_RADIANCE.,
-EOF
-if [ $domain_id == 1 ]; then
-  echo "hroi_radiance = $((HROI_RADIANCE/$dx)),"
-else
-  echo "hroi_radiance = $((HROI_RADIANCE/$dx)),"
-fi
-
-cat << EOF
-vroi_radiance = 999,
+hroi_radiance = $((HROI_RADIANCE/$dx)),
+vroi_radiance = $VROI_RADIANCE,
 datathin_radiance = $THIN_RADIANCE,
 /
 
