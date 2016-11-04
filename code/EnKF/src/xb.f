@@ -877,7 +877,6 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   !setup for GOES-ABI
    REAL, PARAMETER :: sat_h=35780000.0
    REAL, PARAMETER :: sat_lon=140.0/180.0*3.14159
-   INTEGER, parameter :: n_ch=3        !for GOES-ABI
   !====================
 !  INTEGER, intent(in) :: ix = ix  !total number of the x-grid
 !  INTEGER, parameter, intent(in) :: jx = jx  !total number of the y-grid
@@ -928,9 +927,7 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   real :: psfc(ix,jx)
   real :: hgt(ix,jx)
   real :: tsk(ix,jx)
-!  real :: landmask(ix,jx)
-  real :: Tbsend(ix,jx,n_ch)
-  real :: Tb(ix,jx,n_ch)
+  real, allocatable, dimension(:,:,:) :: Tbsend, Tb
 
   ! ============================================================================
   ! 1. **** DEFINE THE CRTM INTERFACE STRUCTURES ****
@@ -1011,9 +1008,11 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
     END IF
   endif 
   n_Channels = SUM(CRTM_ChannelInfo_n_Channels(ChannelInfo))
+
+  allocate(Tb(ix,jx,n_Channels))
+  allocate(Tbsend(ix,jx,n_Channels))
+
   ! ============================================================================
-
-
 
   ! ============================================================================
   ! 3. **** ALLOCATE STRUCTURE ARRAYS ****
@@ -1054,8 +1053,6 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   !
   ! 4a1. Loading Atmosphere and Surface input
   ! --------------------------------
-!  call get_variable2d(inputfile,'XLAT',ix,jx,1,xlat)
-!  call get_variable2d(inputfile,'XLONG',ix,jx,1,xlong)
   call get_variable3d(inputfile,'P',ix,jx,kx,1,p)
   call get_variable3d(inputfile,'PB',ix,jx,kx,1,pb)
   call get_variable3d(inputfile,'PH',ix,jx,kx+1,1,ph)
@@ -1070,7 +1067,6 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   call get_variable2d(inputfile,'PSFC',ix,jx,1,psfc)
   call get_variable2d(inputfile,'TSK',ix,jx,1,tsk)
   call get_variable2d(inputfile,'HGT',ix,jx,1,hgt)
-!  call get_variable2d(inputfile,'LANDMASK',ix,jx,1,landmask)
   lat = xlat/180.0*3.14159
   lon = xlong/180.0*3.14159
   pres = P + PB
@@ -1115,135 +1111,127 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   ! load WRF data into CRTM structures
   !*******************************************************************************
   !--- calcurating delz
-   do z=1,kx
-    if(z.eq.1) then
-     delz(z) = (PH(x,y,z+1) + PHB(x,y,z+1)) / 9.806 - hgt(x,y)
-    else
-     delz(z) = ((PH(x,y,z+1) + PHB(x,y,z+1))-(PH(x,y,z) + PHB(x,y,z)))/2/9.806
-    endif
-   enddo
+  do z=1,kx
+   if(z.eq.1) then
+    delz(z) = (PH(x,y,z+1) + PHB(x,y,z+1)) / 9.806 - hgt(x,y)
+   else
+    delz(z) = ((PH(x,y,z+1) + PHB(x,y,z+1))-(PH(x,y,z) + PHB(x,y,z)))/2/9.806
+   endif
+  enddo
   !---Atmospheric Profile
-   atm(1)%Climatology         = TROPICAL
-   atm(1)%Absorber_Id(1:2)    = (/ H2O_ID, O3_ID /)
-   atm(1)%Absorber_Units(1:2) = (/ MASS_MIXING_RATIO_UNITS,VOLUME_MIXING_RATIO_UNITS /)
-   atm(1)%Level_Pressure(0) = (pres(x,y,kx)*3.0/2.0 - pres(x,y,kx-1)/2.0)/100.0  ! convert from Pa to hPA
-!   atm(1)%Level_Pressure(0) = 0.05
-   do z=kx,1,-1
-     if(z.eq.1) then
-       atm(1)%Level_Pressure(kx-z+1) = psfc(x,y)/100.0  ! convert from Pa tohPA
-     else
-       atm(1)%Level_Pressure(kx-z+1) = ((pres(x,y,z-1)+pres(x,y,z))/2.0)/100.0  ! convert from Pa to hPA
-     endif
-     atm(1)%Pressure(kx-z+1)       = pres(x,y,z) / 100.0
-     atm(1)%Temperature(kx-z+1)    = tk(x,y,z)
-     atm(1)%Absorber(kx-z+1,1)     = qvapor(x,y,z)*1000.0
-   enddo
-   atm(1)%Absorber(:,2) = 5.0E-02 
-   ! when # of vertical layer is 60
-   ! (/1.26E+00, 5.55E-01, 3.24E-01, 1.07E-01, 7.03E-02, 5.87E-02, 6.15E-02,6.43E-02, 6.99E-02, 7.17E-02,&
-   !   7.27E-02, 7.35E-02, 7.38E-02, 7.41E-02, 7.42E-02, 7.41E-02, 7.35E-02,7.31E-02, 7.27E-02, 7.27E-02,&
-   !   7.27E-02, 7.26E-02, 7.17E-02, 7.05E-02, 6.80E-02, 6.73E-02, 6.73E-02,6.76E-02, 6.72E-02, 6.62E-02,&
-   !   6.51E-02, 6.45E-02, 6.44E-02, 6.46E-02, 6.48E-02, 6.49E-02, 6.46E-02,6.42E-02, 6.38E-02, 6.38E-02,&
-   !   6.42E-02, 6.48E-02, 6.56E-02, 6.64E-02, 6.64E-02, 6.72E-02, 6.84E-02,6.84E-02, 6.84E-02, 6.94E-02,&
-   !   6.94E-02, 6.72E-02, 6.72E-02, 6.72E-02, 6.05E-02, 6.05E-02, 6.05E-02,4.12E-02, 4.12E-02, 4.12E-02/)
+  atm(1)%Climatology         = TROPICAL
+  atm(1)%Absorber_Id(1:2)    = (/ H2O_ID, O3_ID /)
+  atm(1)%Absorber_Units(1:2) = (/ MASS_MIXING_RATIO_UNITS,VOLUME_MIXING_RATIO_UNITS /)
+  atm(1)%Level_Pressure(0) = (pres(x,y,kx)*3.0/2.0 - pres(x,y,kx-1)/2.0)/100.0  ! convert from Pa to hPA
+  do z=kx,1,-1
+    if(z.eq.1) then
+      atm(1)%Level_Pressure(kx-z+1) = psfc(x,y)/100.0  ! convert from Pa tohPA
+    else
+      atm(1)%Level_Pressure(kx-z+1) = ((pres(x,y,z-1)+pres(x,y,z))/2.0)/100.0  ! convert from Pa to hPA
+    endif
+    atm(1)%Pressure(kx-z+1)       = pres(x,y,z) / 100.0
+    atm(1)%Temperature(kx-z+1)    = tk(x,y,z)
+    atm(1)%Absorber(kx-z+1,1)     = qvapor(x,y,z)*1000.0
+  enddo
+  atm(1)%Absorber(:,2) = 5.0E-02 
   !---Cloud Profile
   do z=1,kx*5
    atm(1)%Cloud(z)%Type = 0
    atm(1)%Cloud(z)%Effective_Radius = 0.0
    atm(1)%Cloud(z)%Water_Content = 0.0
   enddo
-   ncl = 0
-   icl = 0
-   !--calculating # of clouds (cloud and rain)
-   do z=kx,1,-1
-     if(qcloud(x,y,z).gt.0.0) then
-       ncl = ncl + 1
-     endif
-     if(qrain(x,y,z).gt.0.0) then
-       ncl = ncl + 1
-     endif
-     if(qice(x,y,z).gt.0.0) then
-       ncl = ncl + 1
-     endif
-     if(qsnow(x,y,z).gt.0.0) then
-       ncl = ncl + 1
-     endif
-     if(qgraup(x,y,z).gt.0.0) then
-       ncl = ncl + 1
-     endif
-   enddo
-   !--Data for cloud
-   atm(1)%n_Clouds         = ncl
-   IF ( atm(1)%n_Clouds > 0 ) THEN
-   do z=kx,1,-1
-     if(qcloud(x,y,z).gt.0.0) then
-       icl = icl + 1
-       k1 = kx-z+1
-       k2 = kx-z+1
-       atm(1)%Cloud(icl)%Type = WATER_CLOUD
-       atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 16.8_fp
-       atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
-           qcloud(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
-     endif
-   enddo
-   do z=kx,1,-1
-     if(qrain(x,y,z).gt.0.0) then
-       icl = icl + 1
-       k1 = kx-z+1
-       k2 = kx-z+1
-       atm(1)%Cloud(icl)%Type = RAIN_CLOUD
-       atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 1000.0_fp
-       atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
-           qrain(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
-     endif
-   enddo
-   do z=kx,1,-1
-     if(qice(x,y,z).gt.0.0) then
-       icl = icl + 1
-       k1 = kx-z+1
-       k2 = kx-z+1
-       atm(1)%Cloud(icl)%Type = ICE_CLOUD
-       atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 25.0_fp
-       atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
-           qice(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
-     endif
-   enddo
-   do z=kx,1,-1
-     if(qsnow(x,y,z).gt.0.0) then
-       icl = icl + 1
-       k1 = kx-z+1
-       k2 = kx-z+1
-       atm(1)%Cloud(icl)%Type = SNOW_CLOUD
-       atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 750.0_fp
-       atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
-           qsnow(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
-     endif
-   enddo
-   do z=kx,1,-1
-     if(qgraup(x,y,z).gt.0.0) then
-       icl = icl + 1
-       k1 = kx-z+1
-       k2 = kx-z+1
-       atm(1)%Cloud(icl)%Type = GRAUPEL_CLOUD
-       atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 1500.0_fp
-       atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
-           qgraup(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
-     endif
-   enddo
-   ENDIF
+  ncl = 0
+  icl = 0
+  !--calculating # of clouds (cloud and rain)
+  do z=kx,1,-1
+    if(qcloud(x,y,z).gt.0.0) then
+      ncl = ncl + 1
+    endif
+    if(qrain(x,y,z).gt.0.0) then
+      ncl = ncl + 1
+    endif
+    if(qice(x,y,z).gt.0.0) then
+      ncl = ncl + 1
+    endif
+    if(qsnow(x,y,z).gt.0.0) then
+      ncl = ncl + 1
+    endif
+    if(qgraup(x,y,z).gt.0.0) then
+      ncl = ncl + 1
+    endif
+  enddo
+  !--Data for cloud
+  atm(1)%n_Clouds         = ncl
+  IF ( atm(1)%n_Clouds > 0 ) THEN
+  do z=kx,1,-1
+    if(qcloud(x,y,z).gt.0.0) then
+      icl = icl + 1
+      k1 = kx-z+1
+      k2 = kx-z+1
+      atm(1)%Cloud(icl)%Type = WATER_CLOUD
+      atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 16.8_fp
+      atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
+          qcloud(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
+    endif
+  enddo
+  do z=kx,1,-1
+    if(qrain(x,y,z).gt.0.0) then
+      icl = icl + 1
+      k1 = kx-z+1
+      k2 = kx-z+1
+      atm(1)%Cloud(icl)%Type = RAIN_CLOUD
+      atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 1000.0_fp
+      atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
+          qrain(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
+    endif
+  enddo
+  do z=kx,1,-1
+    if(qice(x,y,z).gt.0.0) then
+      icl = icl + 1
+      k1 = kx-z+1
+      k2 = kx-z+1
+      atm(1)%Cloud(icl)%Type = ICE_CLOUD
+      atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 25.0_fp
+      atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
+          qice(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
+    endif
+  enddo
+  do z=kx,1,-1
+    if(qsnow(x,y,z).gt.0.0) then
+      icl = icl + 1
+      k1 = kx-z+1
+      k2 = kx-z+1
+      atm(1)%Cloud(icl)%Type = SNOW_CLOUD
+      atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 750.0_fp
+      atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
+          qsnow(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
+    endif
+  enddo
+  do z=kx,1,-1
+    if(qgraup(x,y,z).gt.0.0) then
+      icl = icl + 1
+      k1 = kx-z+1
+      k2 = kx-z+1
+      atm(1)%Cloud(icl)%Type = GRAUPEL_CLOUD
+      atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 1500.0_fp
+      atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
+          qgraup(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
+    endif
+  enddo
+  ENDIF
 
   !---Surface data
-   if(landmask(x,y).eq.1.0) then
-    sfc(1)%Water_Coverage = 0.0_fp
-    sfc(1)%Land_Coverage = 1.0_fp
-    sfc(1)%Land_Temperature = tsk(x,y)
-    sfc(1)%Soil_Temperature = tsk(x,y)
-   else
-    sfc(1)%Water_Coverage = 1.0_fp
-    sfc(1)%Land_Coverage = 0.0_fp
-    sfc(1)%Water_Type = 1  ! Sea water
-    sfc(1)%Water_Temperature = tsk(x,y)
-   endif
+  if(landmask(x,y).eq.1.0) then
+   sfc(1)%Water_Coverage = 0.0_fp
+   sfc(1)%Land_Coverage = 1.0_fp
+   sfc(1)%Land_Temperature = tsk(x,y)
+   sfc(1)%Soil_Temperature = tsk(x,y)
+  else
+   sfc(1)%Water_Coverage = 1.0_fp
+   sfc(1)%Land_Coverage = 0.0_fp
+   sfc(1)%Water_Type = 1  ! Sea water
+   sfc(1)%Water_Temperature = tsk(x,y)
+  endif
 
 
   ! 4b. GeometryInfo input
@@ -1303,7 +1291,7 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   !--- end of iob(x,y)-loop
   enddo
 
-  CALL MPI_Allreduce(Tbsend,Tb,ix*jx*n_ch,MPI_REAL,MPI_SUM,comm,ierr)
+  CALL MPI_Allreduce(Tbsend,Tb,ix*jx*n_Channels,MPI_REAL,MPI_SUM,comm,ierr)
 
   ! ============================================================================
 
@@ -1324,10 +1312,14 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
      elseif (Sensor_Id == 'imgr_g13' ) then
          if (obs%ch(iob) .eq. 3) xb_tb(iob) = Tb(x,y,2) !6.19um
          if (obs%ch(iob) .eq. 4) xb_tb(iob) = Tb(x,y,3) !11.2um
+     else
+         do l = 1, n_Channels
+            if (obs%ch(iob) .eq. RTSolution(l,1)%Sensor_Channel) xb_tb(iob) = Tb(x,y,l) 
+         enddo
      endif
   enddo
-    !--initializing the Tbsend fields for Bcast
-    Tbsend = 0.0
+  !--initializing the Tbsend fields for Bcast
+  Tbsend = 0.0
   endif
   if(my_proc_id==0) &
    WRITE(*,'(a10," Tb=",f6.2,"~",f6.2)')inputfile,minval(xb_tb(iob_radmin:iob_radmax)),maxval(xb_tb(iob_radmin:iob_radmax))
@@ -1336,41 +1328,19 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   !  **** initializing all Tb and Tbsend fields ****
   !
   Tb = 0.0
-  CALL MPI_BCAST(Tbsend,ix*jx*n_ch,MPI_REAL,0,comm,ierr)
+  CALL MPI_BCAST(Tbsend,ix*jx*n_Channels,MPI_REAL,0,comm,ierr)
 
   ! ============================================================================
   ! 7. **** DESTROY THE CRTM ****
   !
-!  WRITE( *, '( /5x, "Destroying the CRTM..." )' )
+  deallocate(Tb)
+  deallocate(Tbsend)
   Error_Status = CRTM_Destroy( ChannelInfo )
   IF ( Error_Status /= SUCCESS ) THEN
     Message = 'Error destroying CRTM'
     CALL Display_Message( PROGRAM_NAME, Message, FAILURE )
     STOP
   END IF
-  ! ============================================================================
-
-  !  call parallel_finish()
-
-  ! ============================================================================
-   !---for debug by Minamide
-   !write(*,*) 'lpres',atm(1)%Level_Pressure
-   !write(*,*) 'Pres',atm(1)%Pressure
-   !write(*,*) 'Temp', atm(1)%Temperature
-   !write(*,*) 'H2O', atm(1)%Absorber(:,1)
-   !write(*,*) 'delz',delz
-   !write(*,*) 'hgt',hgt(x,y)
-   !write(*,*) 'ph',ph(x,y,:)
-   !write(*,*) 'phb',phb(x,y,:)
-   !write(*,*) 'qcloud',qcloud(x,y,:)
-   !write(*,*) 'qice',qice(x,y,:)
-   !write(*,*) 'qsnow',qsnow(x,y,:)
-   !write(*,*) 'qrain',qrain(x,y,:)
-   !write(*,*) 'qgraup',qgraup(x,y,:)
-   !do z=1,ncl
-   !write(*,*)
-   !'cloud',atm(1)%Cloud(z)%Type,minval(atm(1)%Cloud(z)%Water_Content),'~',maxval(atm(1)%Cloud(z)%Water_Content)
-   !enddo
   ! ============================================================================
 
 end subroutine xb_to_radiance
