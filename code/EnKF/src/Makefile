@@ -1,7 +1,7 @@
 FC=mpif90
 FCFLAG=-f90=ifort -i4 -w -ftz -align all -fno-alias -fp-model precise -assume realloc_lhs -convert big_endian -traceback
 
-all: enkf.mpi enkf_hydro.mpi replace_perturbationmean_by_initial.exe replace_geo_by_initial.exe replace_xfmean_with_gfs.exe enkf_gfs_hybrid_inflation.exe soairborne_to_3dvar.exe so_to_3dvar.exe ensemble_mean.exe replace_mean.exe replace_mean_outside_site.exe replace_environment_by_gfs.exe 
+all: enkf.mpi enkf_hydro.mpi replace_perturbationmean_by_initial.exe replace_geo_by_initial.exe replace_xfmean_with_gfs.exe enkf_gfs_hybrid_inflation.exe soairborne_to_3dvar.exe so_to_3dvar.exe ensemble_mean.exe replace_mean.exe replace_environment_by_gfs.exe replace_mean_outside_site.exe replace_environment_by_gfs.exe 
 
 clean:
 	rm -f *.o *.mod *.mpi *.exe
@@ -74,7 +74,7 @@ ensemble_mean.exe: module_structure.o mpi_module.o module_netcdf.o module_map_ut
 replace_mean.exe: module_netcdf.o mpi_module.o
 	$(FC) -o replace_mean.exe $(FCFLAG) -FR -I$(NETCDF)/include module_netcdf.o mpi_module.o -L$(NETCDF)/lib -lnetcdf -lnetcdff replace_mean.f
 
-replace_mean.exe: module_netcdf.o mpi_module.o
+replace_environment_by_gfs.exe: module_netcdf.o mpi_module.o
 	$(FC) -o replace_environment_by_gfs.exe $(FCFLAG) -FR -I$(NETCDF)/include module_netcdf.o mpi_module.o -L$(NETCDF)/lib -lnetcdf -lnetcdff replace_environment_by_gfs.f
 
 wrf2obs3dvar: module_netcdf.o module_map_utils.o module_structure.o module_wrf_tools.o
