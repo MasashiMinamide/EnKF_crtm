@@ -1011,6 +1011,8 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
 
   allocate(Tb(ix,jx,n_Channels))
   allocate(Tbsend(ix,jx,n_Channels))
+  Tb = 0.
+  Tbsend = 0.
 
   ! ============================================================================
 
