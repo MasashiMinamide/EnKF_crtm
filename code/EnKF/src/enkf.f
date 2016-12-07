@@ -415,10 +415,9 @@ t0=MPI_Wtime()
      if ( varname .eq. updatevar(iv) ) update_flag = 1
    enddo
 !
-!!---relaxation for Radiance assimilation by Minamide 2015.3.14
    d    = fac * var + error * error
    alpha = 1.0/(1.0+sqrt(error*error/d))
-! --- for Successive Covariance Localization
+   ! --- for Successive Covariance Localization
    ngx = obs%roi(iob,1)
    if (obstype=='Radiance  ') then
      if(varname=='QCLOUD    ' .or. varname=='QRAIN     ' .or. varname=='QICE      ' .or. & !varname=='QVAPOR    ' .or. 
@@ -433,37 +432,15 @@ t0=MPI_Wtime()
          update_flag = 0
        else
          ngx = obs%roi(iob,3)
-         !d = max(fac * var + error * error, y_hxm * y_hxm)
-         !alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
-         !if ( my_proc_id == 0 .and. sqrt(d-fac * var) > error .and. varname=='T         ')&
-         !     write(*,*) 'observation-error inflated to ',sqrt(d-fac * var)
        endif
      endif
+     ! --- Use Adaptive Observation Error Inflation (AOEI) Minamide and Zhang (2016) MWR for BT assimilation
      d = max(fac * var + error * error, y_hxm * y_hxm)
      alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
      if ( my_proc_id == 0 .and. sqrt(d-fac * var) > error .and. varname=='U         ')&
           write(*,*) 'observation-error inflated to ',sqrt(d-fac * var)
-     !if  ( my_proc_id == 0 .and.  varname=='T         ') write(*,*)'hroi for dynamic field = ',ngx
+     ! --- AOEI end
    endif
-!!
-! --- for Observation Error Inflation
-!   if (obstype=='Radiance  ') then
-!      d = max(fac * var + error * error, y_hxm * y_hxm)
-!      alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
-!      if ( my_proc_id == 0 .and. sqrt(d-fac * var) > error .and. varname=='T         ')&
-!           write(*,*) 'observation-error inflated to ',sqrt(d-fac * var)
-!   endif
-!!  excluding pressure fields
-!   if ((obstype=='Radiance  ') .and.  &
-!       (varname=='PH        ' .or. varname=='MU        ' .or. varname=='PSFC      ' .or. varname=='P         ' .or. &
-!        varname=='U         ' .or. varname=='V         ' .or. varname=='U10       ' .or. varname=='V10       ')) then
-!     update_flag = 0
-!   else if ((obstype /= 'Radiance  ') .and.  &
-!       (varname=='QCLOUD    ' .or. varname=='QRAIN     ' .or. varname=='QICE      ' .or. &
-!        varname=='QGRAUP    ' .or. varname=='QSNOW     ' )) then
-!     update_flag = 0
-!   endif
-!!---relaxation end
    if ( update_flag==0 ) cycle update_x_var
 
 ! start and end indices of the update zone of the obs
@@ -796,23 +773,12 @@ enddo update_x_var
       fac  = 1./real(numbers_en-1)
       d    = fac * var + error * error
       alpha= 1.0/(1.0+sqrt(error*error/d))
-!!! relaxation by quality contoling
-!   if ((obstype=='Radiance  ') .and. (abs(y_hxm)>max(error*3.,sqrt(fac *var))))then
-!! error = oma_omb method
-!    d_ogn = d
-!     d    = fac * var + max(abs(y_hxm-fac*var*y_hxm/d)*abs(y_hxm),error**2)
-!     alpha =1.0/(1.0+sqrt(max(abs(y_hxm-fac*var*y_hxm/d_ogn)*abs(y_hxm),error**2)/d))
-!!error = y_hxm
-!     d    = fac * var + abs(y_hxm) * abs(y_hxm)
-!     alpha = 1.0/(1.0+sqrt(abs(y_hxm)*abs(y_hxm)/d))
-!! 
-
-!!!---- OEI
+   ! --- AOEI for BT
    if (obstype=='Radiance  ') then
       d = max(fac * var + error * error, y_hxm * y_hxm)
       alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
    endif
-!!! relaxation end
+   ! --- AOEI end
       do ie=1,numbers_en+1
          if(ie<=numbers_en) &
             ya(iiob,ie)=ya(iiob,ie)-corr_coef*alpha*fac*cov*(ya(iob,ie)-ya(iob,numbers_en+1))/d !perturbation
