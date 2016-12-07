@@ -180,8 +180,8 @@ if $REPLACE_ENVIRONMENT; then
  nt=$((total_ntasks/$HOSTPPN))
  if [ $DATE == $LBDATE ]; then
   tid=0
-#  for n in $domlist; do
-  for n in `seq 1 $((MAX_DOM-1))`; do
+  for n in $domlist; do
+#  for n in `seq 1 $((MAX_DOM-1))`; do
     dm=d`expr $n + 100 |cut -c2-`
     cd $dm
     if [[ ! -d replace_environment ]]; then mkdir -p replace_environment; fi
@@ -212,8 +212,8 @@ if $REPLACE_ENVIRONMENT; then
     cd ../..
   done
 
-#  for n in $domlist; do
-  for n in `seq 1 $((MAX_DOM-1))`; do
+  for n in $domlist; do
+#  for n in `seq 1 $((MAX_DOM-1))`; do
     dm=d`expr $n + 100 |cut -c2-`
     cd $dm
     for NE in `seq 1 $((NUM_ENS+1))`; do
