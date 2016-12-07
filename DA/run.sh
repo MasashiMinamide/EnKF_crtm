@@ -10,20 +10,19 @@
 ##PBS -d .
 
 #####header for stampede######
-#SBATCH -J Himawari8
-#SBATCH -n 512
-#SBATCH -p normal
-#SBATCH -t 24:00:00
+#SBATCH -J run_cycle
+#SBATCH -n 256
+#SBATCH -p development
+#SBATCH -t 2:00:00
 #SBATCH -o out_enkf
 #SBATCH -e error_enkf
 
 source ~/.bashrc
 
 #load configuration files, functions, parameters
-export WORK_EnKF=/work/03154/tg824524/tools/EnKF_crtm_himawari
-export WORK=/scratch/03154/tg824524/simulation/da_goes/H_d1h_mslp_rc075_h8-10minr30t4-300t6
+export WORK_EnKF=PATH_TO_EnKF_DIRECTORY
 cd $WORK_EnKF/DA
-export CONFIG_FILE=$WORK/config
+export CONFIG_FILE=PATH_TO_CONFIG_FILE/config
 . $CONFIG_FILE
 . util.sh
 
