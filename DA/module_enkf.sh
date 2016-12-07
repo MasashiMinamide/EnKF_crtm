@@ -45,7 +45,7 @@ for n in $domlist; do
   ln -fs $DATA_DIR/obs/${DATE:0:4}/obs_gts_`wrf_time_string $DATE`.3DVAR obs_3dvar_${DATE}00
   #airborne radar superobs
   ln -fs $DATA_DIR/so/${DATE:0:4}/${DATE}_all.so_ass airborne_${DATE}_so
-  ln -fs $DATA_DIR/GOES/radiance_${dm}_${DATE}_so radiance_${DATE}_so
+  ln -fs $DATA_DIR/radiance/radiance_${dm}_${DATE}_so radiance_${DATE}_so
 
   # updating non-Q variables only every 1-hour
   if [[ ${DATE:10:2} == '00'  ]]; then
