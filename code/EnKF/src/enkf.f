@@ -329,7 +329,7 @@ end do obs_cycle
 
 if(raw%radiance%num.ne.0) then
   yasend_tb=0.
-  do ie = 1, numbers_en+1
+  do ie = 1, numbers_en!+1
     yasend_tb = 0.0
     write( filename, '(a5,i5.5)') wrf_file(1:5), iunit+ie-1
     call xb_to_radiance(filename,proj,ix,jx,kx,xlong,xlat,xland,iob_radmin,iob_radmax,yasend_tb)
@@ -343,6 +343,7 @@ ym_radiance = 0
 do ie = 1, numbers_en
   ym_radiance = ym_radiance + ya(:,ie)/float(numbers_en)
 enddo
+ya(:,numbers_en+1) = ym_radiance ! using mean of ensemble BTs
 
 !make a copy of yf (prior)
 yf=ya
