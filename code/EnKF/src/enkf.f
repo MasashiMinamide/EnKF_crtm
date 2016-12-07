@@ -338,7 +338,7 @@ if(raw%radiance%num.ne.0) then
 endif
 call MPI_Allreduce(yasend,ya,obs%num*(numbers_en+1),MPI_REAL,MPI_SUM,comm,ierr)
 
-!calcurate mean of ya (radmean) by Minamide 2015.9.25
+!calcurate mean of ya (radmean) by Minamide 2015.9.25 > 2016.12.6
 ym_radiance = 0
 do ie = 1, numbers_en
   ym_radiance = ym_radiance + ya(:,ie)/float(numbers_en)

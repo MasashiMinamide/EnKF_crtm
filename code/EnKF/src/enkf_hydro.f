@@ -162,8 +162,7 @@ real, allocatable, dimension(:,:,:)   :: km, kmsend, km1, km1send
 real, allocatable, dimension(:,:,:,:) :: x1
 ! for satellite radiance
 integer :: iob_radmin,iob_radmax
-real, dimension(obs%num) :: yasend_tb, xbsend_slp_tb
-real, dimension(obs%num,numbers_en+1) :: xb_slp, xbsend_slp
+real, dimension(obs%num) :: yasend_tb, ym_radiance
 real, dimension(ni,nj,nk)     :: xq_n,xq_p
 real, dimension(ni,nj,nk,nm)  :: xq_nsend,xq_psend
 
@@ -331,19 +330,23 @@ end do obs_cycle
 
 if(raw%radiance%num.ne.0) then
   yasend_tb=0.
-  xbsend_slp_tb=0.
   do ie = 1, numbers_en+1
     yasend_tb = 0.0
-    xbsend_slp_tb=0.
     write( filename, '(a5,i5.5)') wrf_file(1:5), iunit+ie-1
-    call xb_to_radiance(filename,proj,ix,jx,kx,xlong,xlat,xland,iob_radmin,iob_radmax,yasend_tb,xbsend_slp_tb)
+    call xb_to_radiance(filename,proj,ix,jx,kx,xlong,xlat,xland,iob_radmin,iob_radmax,yasend_tb)
     yasend(iob_radmin:iob_radmax,ie) = yasend_tb(iob_radmin:iob_radmax)
-    xbsend_slp(iob_radmin:iob_radmax,ie) = xbsend_slp_tb(iob_radmin:iob_radmax)
   enddo
 endif
 !write(*,*)'yasend',yasend(:,1)
 call MPI_Allreduce(yasend,ya,obs%num*(numbers_en+1),MPI_REAL,MPI_SUM,comm,ierr)
-call MPI_Allreduce(xbsend_slp,xb_slp,obs%num*(numbers_en+1),MPI_REAL,MPI_SUM,comm,ierr)
+
+!calcurate mean of ya (radmean) by Minamide 2015.9.25 > 2016.12.6
+ym_radiance = 0
+do ie = 1, numbers_en
+  ym_radiance = ym_radiance + ya(:,ie)/float(numbers_en)
+enddo
+ya(:,numbers_en+1) = ym_radiance ! using mean of ensemble BTs
+
 
 !make a copy of yf (prior)
 yf=ya
@@ -412,14 +415,14 @@ obs_assimilate_cycle : do it = 1,obs%num
 !--------------------------------------------------------------------------------------------------
 ! cycle through variables to process, in x, 2D variables are stored in 3D form (with values only on
 ! k=1), when sending them among cpus, only the lowest layer (:,:,1) are sent and received.
-! --- for Observation Error Inflation
+   ! --- Use Adaptive Observation Error Inflation (AOEI) Minamide and Zhang (2016) MWR for BT assimilation
    if (obstype=='Radiance  ') then
       d = max(fac * var + error * error, y_hxm * y_hxm)
       alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
       if ( my_proc_id == 0 .and. sqrt(d-fac * var) > error)&
            write(*,*) 'observation-error inflated to ',sqrt(d-fac * var)
    endif
-!!!
+   ! --- AOEI end
 update_x_var : do m=1,nv
 t0=MPI_Wtime()
    varname=enkfvar(m)
@@ -427,41 +430,12 @@ t0=MPI_Wtime()
    do iv = 1, num_update_var
      if ( varname .eq. updatevar(iv) ) update_flag = 1
    enddo
-!
-!!---relaxation for Radiance assimilation by Minamide 2015.3.14
-!   d    = fac * var + error * error
-!   alpha = 1.0/(1.0+sqrt(error*error/d))
-! --- for Successive Covariance Localization
-!   ngx = obs%roi(iob,1)
+   ! --- only update Q-variables
    if ((obstype=='Radiance  ') .and. &
        .not. ((varname=='QVAPOR    ' .or. varname=='QCLOUD    ' .or. varname=='QRAIN     ' .or. varname=='QICE      ' .or. &
                varname=='QGRAUP    ' .or. varname=='QSNOW     '))) then
      update_flag = 0
-!     ngx = obs%roi(iob,1)*200/30
-!     d = max(fac * var + error * error, y_hxm * y_hxm)
-!     alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
-!     if ( my_proc_id == 0 .and. sqrt(d-fac * var) > error .and. varname=='T         ')&
-!          write(*,*) 'observation-error inflated to ',sqrt(d-fac * var)
    endif
-!!
-!! --- for Observation Error Inflation
-!   if (obstype=='Radiance  ') then
-!      d = max(fac * var + error * error, y_hxm * y_hxm)
-!      alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
-!      if ( my_proc_id == 0 .and. sqrt(d-fac * var) > error .and. varname=='T         ')&
-!           write(*,*) 'observation-error inflated to ',sqrt(d-fac * var)
-!   endif
-!!  excluding pressure fields
-!   if ((obstype=='Radiance  ') .and.  &
-!       (varname=='PH        ' .or. varname=='MU        ' .or. varname=='PSFC      ' .or. varname=='P         ' .or. &
-!        varname=='U         ' .or. varname=='V         ' .or. varname=='U10       ' .or. varname=='V10       ')) then
-!     update_flag = 0
-!   else if ((obstype /= 'Radiance  ') .and.  &
-!       (varname=='QCLOUD    ' .or. varname=='QRAIN     ' .or. varname=='QICE      ' .or. &
-!        varname=='QGRAUP    ' .or. varname=='QSNOW     ' )) then
-!     update_flag = 0
-!   endif
-!!---relaxation end
    if ( update_flag==0 ) cycle update_x_var
 
 ! start and end indices of the update zone of the obs
@@ -719,10 +693,6 @@ t0=MPI_Wtime()
      do n=1,nm
        ie=(n-1)*nmcpu+gid+1
        if(ie<=numbers_en) then
-!! neglecting tropical cyclone eye region by Minamide 2015.5.8
-!         if ((obstype=='Radiance  ') .and. (xb_slp(iob,ie)<985.0) .and. (ya(iob,ie)>230.0)) then
-!           if ( varname=='T         ') write(*,*)'#',ie,'is TC eye, and not updated.'
-!         else
            x (max(ist,istart)-istart+1:min(ied,iend)-istart+1, &
               max(jst,jstart)-jstart+1:min(jed,jend)-jstart+1, kst:ked,m,n) = &
            x (max(ist,istart)-istart+1:min(ied,iend)-istart+1, &
@@ -730,9 +700,6 @@ t0=MPI_Wtime()
 !         endif
        endif
      enddo
-!     if ((obstype=='Radiance  ') .and. (xb_slp(iob,numbers_en+1)<985.0) .and.(ya(iob,numbers_en+1)>230.0)) then
-!       if ( my_proc_id == 0 .and. varname=='T         ') write(*,*)'ensemble-mean is TC eye, and not updated.'
-!     else
        xm (max(ist,istart)-istart+1:min(ied,iend)-istart+1, &
            max(jst,jstart)-jstart+1:min(jed,jend)-jstart+1, kst:ked,m) = &
        xm (max(ist,istart)-istart+1:min(ied,iend)-istart+1, &
@@ -795,23 +762,12 @@ enddo update_x_var
       fac  = 1./real(numbers_en-1)
       d    = fac * var + error * error
       alpha= 1.0/(1.0+sqrt(error*error/d))
-!!! relaxation by quality contoling
-!   if ((obstype=='Radiance  ') .and. (abs(y_hxm)>max(error*3.,sqrt(fac *var))))then
-!! error = oma_omb method
-!    d_ogn = d
-!     d    = fac * var + max(abs(y_hxm-fac*var*y_hxm/d)*abs(y_hxm),error**2)
-!     alpha =1.0/(1.0+sqrt(max(abs(y_hxm-fac*var*y_hxm/d_ogn)*abs(y_hxm),error**2)/d))
-!!error = y_hxm
-!     d    = fac * var + abs(y_hxm) * abs(y_hxm)
-!     alpha = 1.0/(1.0+sqrt(abs(y_hxm)*abs(y_hxm)/d))
-!! 
-
-!!!---- OEI
+   ! --- AOEI for BT
    if (obstype=='Radiance  ') then
       d = max(fac * var + error * error, y_hxm * y_hxm)
       alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
    endif
-!!! relaxation end
+   ! --- AOEI end
       do ie=1,numbers_en+1
          if(ie<=numbers_en) &
             ya(iiob,ie)=ya(iiob,ie)-corr_coef*alpha*fac*cov*(ya(iob,ie)-ya(iob,numbers_en+1))/d !perturbation
