@@ -1347,3 +1347,522 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
 
 end subroutine xb_to_radiance
 
+
+
+
+
+
+
+
+
+
+!=======================================================================================
+subroutine xb_to_microwave(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin,iob_radmax,xb_tb)
+
+!---------------------
+! radiance subroutine calculates brightness temperature for satellite channels
+!---------------------
+
+  USE constants
+  USE netcdf
+  USE mpi_module
+  USE CRTM_Module
+  use namelist_define
+  use obs_define
+  use wrf_tools
+
+
+  implicit none
+
+  integer, intent(in)                      :: ix, jx, kx
+  integer, intent(out)                     :: iob_radmin,iob_radmax
+  character(len=10), intent(in)            :: inputfile
+  type(proj_info), intent(in)              :: proj                   ! 1st guestmap info
+  real, dimension(obs%num), intent(out)    :: xb_tb
+  real, dimension(ix, jx ), intent(in)     :: xlong
+  real, dimension(ix, jx ), intent(in)     :: xlat
+  real, dimension(ix, jx ), intent(in)     :: landmask
+  integer                                  :: iob,irad
+  real                                     :: obs_ii, obs_jj, dx,dxm,dy,dym
+
+  CHARACTER(*), PARAMETER :: PROGRAM_NAME   = 'ctrm'
+  CHARACTER(*), PARAMETER :: RESULTS_PATH = './results/'
+  CHARACTER(*), PARAMETER :: CRTM_code ='/work/03154/tg824524/tools/EnKF_crtm/code/CRTM/crtm_wrf/'
+  REAL, PARAMETER :: P1000MB=100000.D0
+  REAL, PARAMETER :: R_D=287.D0
+  REAL, PARAMETER :: Cpd=7.D0*R_D/2.D0
+  REAL, PARAMETER :: Re=6378000.0
+  !====================
+  !setup for GOES-ABI
+   REAL, PARAMETER :: sat_h=35780000.0
+   REAL, PARAMETER :: sat_lon=140.0/180.0*3.14159
+  !====================
+!  INTEGER, intent(in) :: ix = ix  !total number of the x-grid
+!  INTEGER, parameter, intent(in) :: jx = jx  !total number of the y-grid
+!  INTEGER, parameter, intent(in) :: kx = kx        !level range
+  ! Profile dimensions...
+  INTEGER, PARAMETER :: N_PROFILES  = 1 
+!  INTEGER, PARAMETER :: N_LAYERS    = kx
+  INTEGER, PARAMETER :: N_ABSORBERS = 2 
+!  INTEGER, PARAMETER :: N_CLOUDS    = kx*5
+  INTEGER, PARAMETER :: N_AEROSOLS  = 0
+  INTEGER, PARAMETER :: N_SENSORS = 1
+  REAL(fp) :: ZENITH_ANGLE, SCAN_ANGLE, sat_dis
+
+  ! Variables
+  CHARACTER(256) :: Message
+  CHARACTER(256) :: Version
+  CHARACTER(256) :: Sensor_Id
+  CHARACTER(256) :: FILE_NAME
+  CHARACTER(256) :: obstype
+  CHARACTER(12)  :: sat_id
+  INTEGER :: Error_Status
+  INTEGER :: Allocate_Status
+  INTEGER :: n_Channels
+  INTEGER :: l, m, irec, yend, ystart, nyi
+  integer :: ncid,ncrcode
+  character(LEN=16) :: var_name
+  character(LEN=3)  :: file_ens
+  integer :: x,y,tt,v,z,n,reci,ens,n_ec,num_radgrid
+  INTEGER :: ncl,icl,k1,k2
+  integer :: lat_radiance(ix*jx)  ! latitude
+  integer :: lon_radiance(ix*jx) ! longitude
+  real :: lat(ix,jx)   ! in radian
+  real :: lon(ix,jx)   ! in radian
+  real :: p(ix,jx,kx)
+  real :: pb(ix,jx,kx)
+  real :: pres(ix,jx,kx)
+  real :: ph(ix,jx,kx+1)
+  real :: phb(ix,jx,kx+1)
+  real :: delz(kx)
+  real :: t(ix,jx,kx)
+  real :: tk(ix,jx,kx)
+  real :: qvapor(ix,jx,kx)
+  real :: qcloud(ix,jx,kx)
+  real :: qrain(ix,jx,kx)
+  real :: qice(ix,jx,kx)
+  real :: qsnow(ix,jx,kx)
+  real :: qgraup(ix,jx,kx)
+  real :: psfc(ix,jx)
+  real :: hgt(ix,jx)
+  real :: tsk(ix,jx)
+  real, allocatable, dimension(:,:,:) :: Tbsend, Tb
+
+  ! ============================================================================
+  ! 1. **** DEFINE THE CRTM INTERFACE STRUCTURES ****
+  !
+  TYPE(CRTM_ChannelInfo_type)             :: ChannelInfo(N_SENSORS)
+  TYPE(CRTM_Geometry_type)                :: Geometry(N_PROFILES)
+  TYPE(CRTM_Atmosphere_type)              :: Atm(N_PROFILES)
+  TYPE(CRTM_Surface_type)                 :: Sfc(N_PROFILES)
+  TYPE(CRTM_RTSolution_type), ALLOCATABLE :: RTSolution(:,:)
+  TYPE(CRTM_Options_type)                 :: Options(N_PROFILES)
+  ! ============================================================================
+
+  ! ============================================================================
+  ! 1.5. **** make a loop to get the number of satellite-radiance-iob ****
+  !
+  num_radgrid = 0
+  check_cycle:do iob=1,obs%num
+    obstype = obs%type(iob)
+    if ( obstype(1:8) == 'Radiance' ) then
+     if(num_radgrid == 0) then
+      num_radgrid = num_radgrid + 1
+      lon_radiance(num_radgrid) = int(obs%position(iob,1))
+      lat_radiance(num_radgrid) = int(obs%position(iob,2))
+      iob_radmin = iob
+      iob_radmax = iob
+     else
+      iob_radmax = iob
+      do irad = 1,num_radgrid
+      if((lon_radiance(irad)==int(obs%position(iob,1))).and.(lat_radiance(irad)==int(obs%position(iob,2))))cycle check_cycle
+      enddo
+      num_radgrid = num_radgrid + 1
+      lon_radiance(num_radgrid) = int(obs%position(iob,1))
+      lat_radiance(num_radgrid) = int(obs%position(iob,2))
+     endif
+    endif
+  enddo check_cycle
+
+
+  ! ============================================================================
+  ! --------------
+  CALL CRTM_Version( Version )
+  !if(my_proc_id==0)  write(*,*) "CRTM ver.",TRIM(Version) 
+  ! Get sensor id from user
+  ! -----------------------
+  !It assumes that all the Radiance data is same sattelite as the first data.
+  Sensor_Id = trim(adjustl(obs%sat(iob_radmin)))
+  
+  ! ============================================================================
+  ! 2. **** INITIALIZE THE CRTM ****
+  !
+  ! 2a. This initializes the CRTM for the sensors
+  !     predefined in the example SENSOR_ID parameter.
+  !     NOTE: The coefficient data file path is hard-
+  !           wired for this example.
+  ! --------------------------------------------------
+  !if(my_proc_id==0) WRITE( *,'(/5x,"Initializing the CRTM...")' )
+  Error_Status = CRTM_Init( (/Sensor_Id/), &  ! Input... must be an array, hencethe (/../)
+                            ChannelInfo  , &  ! Output
+                            IRwaterCoeff_File='WuSmith.IRwater.EmisCoeff.bin',&
+                            IRlandCoeff_File='IGBP.IRland.EmisCoeff.bin',&
+                            File_Path='coefficients/')
+  IF ( Error_Status /= SUCCESS ) THEN
+    Message = 'Error initializing CRTM'
+    CALL Display_Message( PROGRAM_NAME, Message, FAILURE )
+    STOP
+  END IF
+
+  ! 2b. Determine the total number of channels
+  !     for which the CRTM was initialized
+  ! ------------------------------------------
+  ! Specify channel 14 for GOES-R ABI
+  if (Sensor_Id == 'abi_gr' .or. Sensor_Id == 'ahi_h8' ) then
+    Error_Status = CRTM_ChannelInfo_Subset( ChannelInfo(1), Channel_Subset =(/8,9,10/) )
+    IF ( Error_Status /= SUCCESS ) THEN
+      Message = 'Error initializing CRTM'
+      CALL Display_Message( PROGRAM_NAME, Message, FAILURE )
+      STOP
+    END IF
+  endif 
+  n_Channels = SUM(CRTM_ChannelInfo_n_Channels(ChannelInfo))
+
+  allocate(Tb(ix,jx,n_Channels))
+  allocate(Tbsend(ix,jx,n_Channels))
+  Tb = 0.
+  Tbsend = 0.
+
+  ! ============================================================================
+
+  ! ============================================================================
+  ! 3. **** ALLOCATE STRUCTURE ARRAYS ****
+  !
+  ! 3a. Allocate the ARRAYS
+  ! -----------------------
+  ! Note that only those structure arrays with a channel
+  ! dimension are allocated here because we've parameterized
+  ! the number of profiles in the N_PROFILES parameter.
+  !
+  ! Users can make the 
+  ! then the INPUT arrays (Atm, Sfc) will also have to be allocated.
+  ALLOCATE( RTSolution( n_Channels, N_PROFILES ), STAT=Allocate_Status )
+  IF ( Allocate_Status /= 0 ) THEN
+    Message = 'Error allocating structure arrays'
+    CALL Display_Message( PROGRAM_NAME, Message, FAILURE )
+    STOP
+  END IF
+
+  ! 3b. Allocate the STRUCTURES
+  ! ---------------------------
+  ! The input FORWARD structure
+  CALL CRTM_Atmosphere_Create( Atm, kx, N_ABSORBERS, kx*5, N_AEROSOLS)
+  IF ( ANY(.NOT. CRTM_Atmosphere_Associated(Atm)) ) THEN
+    Message = 'Error allocating CRTM Atmosphere structures'
+    CALL Display_Message( PROGRAM_NAME, Message, FAILURE )
+    STOP
+  END IF
+  ! ============================================================================
+
+  ! ============================================================================
+  ! 4. **** ASSIGN INPUT DATA ****
+  !
+  ! Fill the Atm structure array.
+  ! NOTE: This is an example program for illustrative purposes only.
+  !       Typically, one would not assign the data as shown below,
+  !       but rather read it from file
+  !
+  ! 4a1. Loading Atmosphere and Surface input
+  ! --------------------------------
+  call get_variable3d(inputfile,'P',ix,jx,kx,1,p)
+  call get_variable3d(inputfile,'PB',ix,jx,kx,1,pb)
+  call get_variable3d(inputfile,'PH',ix,jx,kx+1,1,ph)
+  call get_variable3d(inputfile,'PHB',ix,jx,kx+1,1,phb)
+  call get_variable3d(inputfile,'T',ix,jx,kx,1,t)
+  call get_variable3d(inputfile,'QVAPOR',ix,jx,kx,1,qvapor)
+  call get_variable3d(inputfile,'QCLOUD',ix,jx,kx,1,qcloud)
+  call get_variable3d(inputfile,'QRAIN',ix,jx,kx,1,qrain)
+  call get_variable3d(inputfile,'QICE',ix,jx,kx,1,qice)
+  call get_variable3d(inputfile,'QSNOW',ix,jx,kx,1,qsnow)
+  call get_variable3d(inputfile,'QGRAUP',ix,jx,kx,1,qgraup)
+  call get_variable2d(inputfile,'PSFC',ix,jx,1,psfc)
+  call get_variable2d(inputfile,'TSK',ix,jx,1,tsk)
+  call get_variable2d(inputfile,'HGT',ix,jx,1,hgt)
+  lat = xlat/180.0*3.14159
+  lon = xlong/180.0*3.14159
+  pres = P + PB
+  tk = (T + 300.0) * ( (pres / P1000MB) ** (R_D/Cpd) )
+  where(qvapor.lt.0.0) qvapor=1.0e-8
+  where(qcloud.lt.0.0) qcloud=0.0
+  where(qice.lt.0.0) qice=0.0
+  where(qrain.lt.0.0) qrain=0.0
+  where(qsnow.lt.0.0) qsnow=0.0
+  where(qgraup.lt.0.0) qgraup=0.0
+
+  ! 4a2. Parallerization with grids
+  ! --------------------------------
+  !--- preparation for the x,y-loop
+  if(mod(num_radgrid,nprocs).eq.0) then
+     nyi=num_radgrid/nprocs
+  else
+     nyi=num_radgrid/nprocs+1
+  endif
+  ystart=my_proc_id*nyi+1
+  yend=min(num_radgrid,(my_proc_id+1)*nyi)
+
+  do iob = ystart, yend
+     obs_ii=lon_radiance(iob)
+     obs_jj=lat_radiance(iob)
+     x = int( obs_ii )
+     y = int( obs_jj )
+
+  ! 4a3. Converting WRF data for CRTM structure
+  ! --------------------------------
+  !--- converting the data to CRTM structure
+
+  !*******************************************************************************
+  ! satellite information
+  !*******************************************************************************
+
+  sat_dis=sqrt(Re**2.0+(Re+sat_h)**2.0-2.0*Re*(Re+sat_h)*cos(lon(x,y)-sat_lon)*cos(lat(x,y)))
+  SCAN_ANGLE=180.0/3.14159*asin(Re/sat_dis*sqrt(1-(cos(lon(x,y)-sat_lon)*cos(lat(x,y)))**2))
+  ZENITH_ANGLE=SCAN_ANGLE+180.0/3.14159*acos(cos(lon(x,y)-sat_lon)*cos(lat(x,y)))
+
+  !*******************************************************************************
+  ! load WRF data into CRTM structures
+  !*******************************************************************************
+  !--- calcurating delz
+  do z=1,kx
+   if(z.eq.1) then
+    delz(z) = (PH(x,y,z+1) + PHB(x,y,z+1)) / 9.806 - hgt(x,y)
+   else
+    delz(z) = ((PH(x,y,z+1) + PHB(x,y,z+1))-(PH(x,y,z) + PHB(x,y,z)))/2/9.806
+   endif
+  enddo
+  !---Atmospheric Profile
+  atm(1)%Climatology         = TROPICAL
+  atm(1)%Absorber_Id(1:2)    = (/ H2O_ID, O3_ID /)
+  atm(1)%Absorber_Units(1:2) = (/ MASS_MIXING_RATIO_UNITS,VOLUME_MIXING_RATIO_UNITS /)
+  atm(1)%Level_Pressure(0) = (pres(x,y,kx)*3.0/2.0 - pres(x,y,kx-1)/2.0)/100.0  ! convert from Pa to hPA
+  do z=kx,1,-1
+    if(z.eq.1) then
+      atm(1)%Level_Pressure(kx-z+1) = psfc(x,y)/100.0  ! convert from Pa tohPA
+    else
+      atm(1)%Level_Pressure(kx-z+1) = ((pres(x,y,z-1)+pres(x,y,z))/2.0)/100.0  ! convert from Pa to hPA
+    endif
+    atm(1)%Pressure(kx-z+1)       = pres(x,y,z) / 100.0
+    atm(1)%Temperature(kx-z+1)    = tk(x,y,z)
+    atm(1)%Absorber(kx-z+1,1)     = qvapor(x,y,z)*1000.0
+  enddo
+  atm(1)%Absorber(:,2) = 5.0E-02 
+  !---Cloud Profile
+  do z=1,kx*5
+   atm(1)%Cloud(z)%Type = 0
+   atm(1)%Cloud(z)%Effective_Radius = 0.0
+   atm(1)%Cloud(z)%Water_Content = 0.0
+  enddo
+  ncl = 0
+  icl = 0
+  !--calculating # of clouds (cloud and rain)
+  do z=kx,1,-1
+    if(qcloud(x,y,z).gt.0.0) then
+      ncl = ncl + 1
+    endif
+    if(qrain(x,y,z).gt.0.0) then
+      ncl = ncl + 1
+    endif
+    if(qice(x,y,z).gt.0.0) then
+      ncl = ncl + 1
+    endif
+    if(qsnow(x,y,z).gt.0.0) then
+      ncl = ncl + 1
+    endif
+    if(qgraup(x,y,z).gt.0.0) then
+      ncl = ncl + 1
+    endif
+  enddo
+  !--Data for cloud
+  atm(1)%n_Clouds         = ncl
+  IF ( atm(1)%n_Clouds > 0 ) THEN
+  do z=kx,1,-1
+    if(qcloud(x,y,z).gt.0.0) then
+      icl = icl + 1
+      k1 = kx-z+1
+      k2 = kx-z+1
+      atm(1)%Cloud(icl)%Type = WATER_CLOUD
+      atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 16.8_fp
+      atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
+          qcloud(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
+    endif
+  enddo
+  do z=kx,1,-1
+    if(qrain(x,y,z).gt.0.0) then
+      icl = icl + 1
+      k1 = kx-z+1
+      k2 = kx-z+1
+      atm(1)%Cloud(icl)%Type = RAIN_CLOUD
+      atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 1000.0_fp
+      atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
+          qrain(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
+    endif
+  enddo
+  do z=kx,1,-1
+    if(qice(x,y,z).gt.0.0) then
+      icl = icl + 1
+      k1 = kx-z+1
+      k2 = kx-z+1
+      atm(1)%Cloud(icl)%Type = ICE_CLOUD
+      atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 25.0_fp
+      atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
+          qice(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
+    endif
+  enddo
+  do z=kx,1,-1
+    if(qsnow(x,y,z).gt.0.0) then
+      icl = icl + 1
+      k1 = kx-z+1
+      k2 = kx-z+1
+      atm(1)%Cloud(icl)%Type = SNOW_CLOUD
+      atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 750.0_fp
+      atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
+          qsnow(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
+    endif
+  enddo
+  do z=kx,1,-1
+    if(qgraup(x,y,z).gt.0.0) then
+      icl = icl + 1
+      k1 = kx-z+1
+      k2 = kx-z+1
+      atm(1)%Cloud(icl)%Type = GRAUPEL_CLOUD
+      atm(1)%Cloud(icl)%Effective_Radius(k1:k2) = 1500.0_fp
+      atm(1)%Cloud(icl)%Water_Content(k1:k2)    = &
+          qgraup(x,y,z)*pres(x,y,z)/287.2/(tk(x,y,z)+0.61*(qvapor(x,y,z)/(1+qvapor(x,y,z))))*delz(z)
+    endif
+  enddo
+  ENDIF
+
+  !---Surface data
+  if(landmask(x,y).eq.1.0) then
+   sfc(1)%Water_Coverage = 0.0_fp
+   sfc(1)%Land_Coverage = 1.0_fp
+   sfc(1)%Land_Temperature = tsk(x,y)
+   sfc(1)%Soil_Temperature = tsk(x,y)
+  else
+   sfc(1)%Water_Coverage = 1.0_fp
+   sfc(1)%Land_Coverage = 0.0_fp
+   sfc(1)%Water_Type = 1  ! Sea water
+   sfc(1)%Water_Temperature = tsk(x,y)
+  endif
+
+
+  ! 4b. GeometryInfo input
+  ! ----------------------
+  ! All profiles are given the same value
+  !  The Sensor_Scan_Angle is optional.
+  CALL CRTM_Geometry_SetValue( Geometry, &
+                               Sensor_Zenith_Angle = ZENITH_ANGLE, &
+                               Sensor_Scan_Angle   = SCAN_ANGLE )
+
+
+  ! 4c. Use the SOI radiative transfer algorithm
+  ! --------------------------------------------
+  Options%RT_Algorithm_ID = RT_SOI
+  ! ============================================================================
+
+  ! ============================================================================
+  ! 5. **** CALL THE CRTM FORWARD MODEL ****
+  !
+  Error_Status = CRTM_Forward( Atm        , &
+                               Sfc        , &
+                               Geometry   , &
+                               ChannelInfo, &
+                               RTSolution , &
+                               Options = Options )
+  IF ( Error_Status /= SUCCESS ) THEN
+    Message = 'Error in CRTM Forward Model'
+    CALL Display_Message( PROGRAM_NAME, Message, FAILURE )
+    STOP
+  END IF
+  ! ============================================================================
+
+
+
+  ! ============================================================================
+  ! 6. **** Collecting output ****
+  !
+  ! User should read the user guide or the source code of the routine
+  ! CRTM_RTSolution_Inspect in the file CRTM_RTSolution_Define.f90 to
+  ! select the needed variables for outputs.  These variables are contained
+  ! in the structure RTSolution.
+  !
+  !DO m = 1, N_PROFILES
+  !  WRITE( *,'(//7x,"Profile ",i0," output for ",a )') n, TRIM(Sensor_Id)
+  !  DO l = 1, n_Channels
+  !    WRITE( *, '(/5x,"Channel ",i0," results")') RTSolution(l,m)%Sensor_Channel
+  !    CALL CRTM_RTSolution_Inspect(RTSolution(l,m))
+  !  END DO
+  !END DO
+
+  !---for file output, edited 2014.9.26
+  do l = 1, n_Channels
+      Tbsend(x,y,l) = real(RTSolution(l,1)%Brightness_Temperature)
+  enddo
+  !WRITE(*,'(7x,"Profile (",i0,", ",i0,") finished Tb =  ",f6.2)')x,y,Tbsend(x,y,2)
+
+  !--- end of iob(x,y)-loop
+  enddo
+
+  CALL MPI_Allreduce(Tbsend,Tb,ix*jx*n_Channels,MPI_REAL,MPI_SUM,comm,ierr)
+
+  ! ============================================================================
+
+  ! ============================================================================
+  !6.5  **** writing the output ****
+  !
+  if(my_proc_id==0) then
+  do iob = iob_radmin, iob_radmax
+     obs_ii=obs%position(iob,1)
+     obs_jj=obs%position(iob,2)
+     x = int( obs_ii )
+     y = int( obs_jj )
+     if (Sensor_Id == 'abi_gr' .or. Sensor_Id == 'ahi_h8' ) then
+         if (obs%ch(iob) .eq. 8) xb_tb(iob) = Tb(x,y,1) !6.19um
+         if (obs%ch(iob) .eq. 9) xb_tb(iob) = Tb(x,y,2) !6.95um
+         if (obs%ch(iob) .eq. 10) xb_tb(iob) = Tb(x,y,3) !7.34um
+         if (obs%ch(iob) .eq. 14) write(*,*)'change channel setting for ch14' !xb_tb(iob) = Tb(x,y,4) !11.2um
+     elseif (Sensor_Id == 'imgr_g13' ) then
+         if (obs%ch(iob) .eq. 3) xb_tb(iob) = Tb(x,y,2) !6.19um
+         if (obs%ch(iob) .eq. 4) xb_tb(iob) = Tb(x,y,3) !11.2um
+     else
+         do l = 1, n_Channels
+            if (obs%ch(iob) .eq. RTSolution(l,1)%Sensor_Channel) xb_tb(iob) = Tb(x,y,l) 
+         enddo
+     endif
+  enddo
+  !--initializing the Tbsend fields for Bcast
+  Tbsend = 0.0
+  endif
+  if(my_proc_id==0) &
+   WRITE(*,'(a10," Tb=",f6.2,"~",f6.2)')inputfile,minval(xb_tb(iob_radmin:iob_radmax)),maxval(xb_tb(iob_radmin:iob_radmax))
+
+  ! ============================================================================
+  !  **** initializing all Tb and Tbsend fields ****
+  !
+  Tb = 0.0
+  CALL MPI_BCAST(Tbsend,ix*jx*n_Channels,MPI_REAL,0,comm,ierr)
+
+  ! ============================================================================
+  ! 7. **** DESTROY THE CRTM ****
+  !
+  deallocate(Tb)
+  deallocate(Tbsend)
+  Error_Status = CRTM_Destroy( ChannelInfo )
+  IF ( Error_Status /= SUCCESS ) THEN
+    Message = 'Error destroying CRTM'
+    CALL Display_Message( PROGRAM_NAME, Message, FAILURE )
+    STOP
+  END IF
+  ! ============================================================================
+
+end subroutine xb_to_microwave
+
