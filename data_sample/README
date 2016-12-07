@@ -1,0 +1,7 @@
+## filename: 
+#radiance_d0{domain}_YYYYmmDDHHMM_so
+## data contents:
+# DATE, satellite ID, channel, latitude, longitude, Brightness temperature, ROI(i.e. covariance localization Radius Of Influence) for hydrometeors, ROI for other variables, observation error 
+## data format:
+# (2a12,i12,3f12.3,2i12,f12.3)
+201009162200    imgr_g13           3      16.877     -97.116     226.979          30         200       3.000
