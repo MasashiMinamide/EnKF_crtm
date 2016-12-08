@@ -20,10 +20,9 @@
 source ~/.bashrc
 
 #load configuration files, functions, parameters
-export WORK_EnKF=PATH_TO_EnKF_DIRECTORY
-cd $WORK_EnKF/DA
 export CONFIG_FILE=PATH_TO_CONFIG_FILE/config
 . $CONFIG_FILE
+cd $SCRIPT_DIR
 . util.sh
 
 if [[ ! -d $WORK_DIR ]]; then mkdir -p $WORK_DIR; fi
