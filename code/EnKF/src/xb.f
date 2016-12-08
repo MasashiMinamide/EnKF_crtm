@@ -1127,7 +1127,7 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   atm(1)%Level_Pressure(0) = (pres(x,y,kx)*3.0/2.0 - pres(x,y,kx-1)/2.0)/100.0  ! convert from Pa to hPA
   do z=kx,1,-1
     if(z.eq.1) then
-      atm(1)%Level_Pressure(kx-z+1) = psfc(x,y)/100.0  ! convert from Pa tohPA
+      atm(1)%Level_Pressure(kx-z+1) = max(psfc(x,y), pres(x,y,1)*3.0/2.0-pres(x,y,2)/2.0)/100.0
     else
       atm(1)%Level_Pressure(kx-z+1) = ((pres(x,y,z-1)+pres(x,y,z))/2.0)/100.0  ! convert from Pa to hPA
     endif
