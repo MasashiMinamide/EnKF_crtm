@@ -162,7 +162,7 @@ real, allocatable, dimension(:,:,:)   :: km, kmsend, km1, km1send
 real, allocatable, dimension(:,:,:,:) :: x1
 ! for satellite radiance
 integer :: iob_radmin,iob_radmax
-real, dimension(obs%num) :: yasend_tb, ym_radiance
+real, dimension(obs%num) :: yasend_tb, yam_radiance, yfm_radiance
 real, dimension(ni,nj,nk)     :: xq_n,xq_p
 real, dimension(ni,nj,nk,nm)  :: xq_nsend,xq_psend
 
@@ -341,12 +341,11 @@ endif
 call MPI_Allreduce(yasend,ya,obs%num*(numbers_en+1),MPI_REAL,MPI_SUM,comm,ierr)
 
 !calcurate mean of ya (radmean) by Minamide 2015.9.25 > 2016.12.6
-ym_radiance = 0
+yfm_radiance = 0
 do ie = 1, numbers_en
-  ym_radiance = ym_radiance + ya(:,ie)/float(numbers_en)
+  yfm_radiance = yfm_radiance + ya(:,ie)/float(numbers_en)
 enddo
-ya(:,numbers_en+1) = ym_radiance ! using mean of ensemble BTs
-
+yam_radiance = yfm_radiance
 
 !make a copy of yf (prior)
 yf=ya
@@ -406,7 +405,7 @@ obs_assimilate_cycle : do it = 1,obs%num
 ! d=hBh'+r, for each obs, d reduces to a scalar, r=error^2.
    var = 0.
    do ie = 1, numbers_en
-      hxa(ie) = ya(iob,ie)-ya(iob,numbers_en+1)
+      hxa(ie) = ya(iob,ie)-yam_radiance(iob)
       var     = var + hxa(ie)*hxa(ie)
    enddo 
    fac  = 1./real(numbers_en-1) 
@@ -754,7 +753,7 @@ enddo update_x_var
       var=0.
       cov=0.
       do ie=1,numbers_en
-         hxa(ie) = ya(iob,ie)-ya(iob,numbers_en+1)
+         hxa(ie) = ya(iob,ie)-yam_radiance(iob)
          var     = var + hxa(ie)*hxa(ie)
          cov     = cov + hxa(ie)*(ya(iiob,ie)-ya(iiob,numbers_en+1))
       enddo
@@ -770,11 +769,17 @@ enddo update_x_var
    ! --- AOEI end
       do ie=1,numbers_en+1
          if(ie<=numbers_en) &
-            ya(iiob,ie)=ya(iiob,ie)-corr_coef*alpha*fac*cov*(ya(iob,ie)-ya(iob,numbers_en+1))/d !perturbation
+            ya(iiob,ie)=ya(iiob,ie)-corr_coef*alpha*fac*cov*(ya(iob,ie)-yam_radiance(iob))/d !perturbation
          ya(iiob,ie)=ya(iiob,ie)+corr_coef*fac*cov*(obs%dat(iob)-ya(iob,numbers_en+1))/d        !mean
          if(obstype(10:10)=='Q' .and. ya(iiob,ie)<0.) ya(iiob,ie)=0.  ! remove negative values of Q
       enddo
    end do update_y_cycle
+
+   ! calculate mean
+   yam_radiance = 0
+   do ie = 1, numbers_en
+     yam_radiance = yam_radiance + ya(:,ie)/float(numbers_en)
+   enddo
 
 end do obs_assimilate_cycle
 
@@ -797,8 +802,8 @@ do iob=1,obs%num
   var_a=0.0
   var_b=0.0
   do ie=1,numbers_en
-    var_a=var_a+(ya(iob,ie)-ya(iob,numbers_en+1))**2
-    var_b=var_b+(yf(iob,ie)-yf(iob,numbers_en+1))**2
+    var_a=var_a+(ya(iob,ie)-yam_radiance(iob))**2
+    var_b=var_b+(yf(iob,ie)-yfm_radiance(iob))**2
   enddo
   var_a=var_a/real(numbers_en-1)
   var_b=var_b/real(numbers_en-1)
