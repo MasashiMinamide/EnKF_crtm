@@ -767,7 +767,7 @@ enddo update_x_var
       do ie=1,numbers_en
          hxa(ie) = ya(iob,ie)-yam_radiance(iob)
          var     = var + hxa(ie)*hxa(ie)
-         cov     = cov + hxa(ie)*(ya(iiob,ie)-ya(iiob,numbers_en+1))
+         cov     = cov + hxa(ie)*(ya(iiob,ie)-yam_radiance(iiob))
       enddo
       error=obs%err(iob)
       fac  = 1./real(numbers_en-1)
