@@ -405,8 +405,8 @@ obs_assimilate_cycle : do it = 1,obs%num
 ! d=hBh'+r, for each obs, d reduces to a scalar, r=error^2.
    var = 0.
    do ie = 1, numbers_en
-      hxa(ie) = ya(iob,ie)-yam_radiance(iob)
-      var     = var + hxa(ie)*hxa(ie)
+      hxa(ie) = ya(iob,ie) - ya(iob,numbers_en+1)
+      var     = var + (ya(iob,ie)- yam_radiance(iob))**2
    enddo 
    fac  = 1./real(numbers_en-1) 
    d    = fac * var + error * error 
@@ -753,9 +753,9 @@ enddo update_x_var
       var=0.
       cov=0.
       do ie=1,numbers_en
-         hxa(ie) = ya(iob,ie)-yam_radiance(iob)
-         var     = var + hxa(ie)*hxa(ie)
-         cov     = cov + hxa(ie)*(ya(iiob,ie)-yam_radiance(iiob))
+         hxa(ie) = ya(iob,ie)-ya(iob,numbers_en+1)
+         var     = var + (ya(iob,ie)-yam_radiance(iob))**2
+         cov     = cov + (ya(iob,ie)-yam_radiance(iob)) * (ya(iiob,ie)-yam_radiance(iiob))
       enddo
       error=obs%err(iob)
       fac  = 1./real(numbers_en-1)
