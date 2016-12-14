@@ -406,7 +406,7 @@ obs_assimilate_cycle : do it = 1,obs%num
    var = 0.
    do ie = 1, numbers_en
       hxa(ie) = ya(iob,ie) - ya(iob,numbers_en+1)
-      var     = var + (ya(iob,ie)- yam_radiance(iob))**2
+      var     = var + hxa(ie)*hxa(ie)
    enddo 
    fac  = 1./real(numbers_en-1) 
    d    = fac * var + error * error 
@@ -754,8 +754,8 @@ enddo update_x_var
       cov=0.
       do ie=1,numbers_en
          hxa(ie) = ya(iob,ie)-ya(iob,numbers_en+1)
-         var     = var + (ya(iob,ie)-yam_radiance(iob))**2
-         cov     = cov + (ya(iob,ie)-yam_radiance(iob)) * (ya(iiob,ie)-yam_radiance(iiob))
+         var     = var + hxa(ie)*hxa(ie)
+         cov     = cov + hxa(ie)*(ya(iiob,ie)-ya(iiob,numbers_en+1))
       enddo
       error=obs%err(iob)
       fac  = 1./real(numbers_en-1)
@@ -769,7 +769,7 @@ enddo update_x_var
    ! --- AOEI end
       do ie=1,numbers_en+1
          if(ie<=numbers_en) &
-            ya(iiob,ie)=ya(iiob,ie)-corr_coef*alpha*fac*cov*(ya(iob,ie)-yam_radiance(iob))/d !perturbation
+            ya(iiob,ie)=ya(iiob,ie)-corr_coef*alpha*fac*cov*(ya(iob,ie)-ya(iob,numbers_en+1))/d !perturbation
          ya(iiob,ie)=ya(iiob,ie)+corr_coef*fac*cov*(obs%dat(iob)-ya(iob,numbers_en+1))/d        !mean
          if(obstype(10:10)=='Q' .and. ya(iiob,ie)<0.) ya(iiob,ie)=0.  ! remove negative values of Q
       enddo
