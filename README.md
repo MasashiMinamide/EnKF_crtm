@@ -5,7 +5,7 @@ This is the modified version of [PSU WRF-EnKF system](http://www.adapt.psu.edu/i
 - EnKF component code: Fuqing Zhang, Yonghui Weng, Michael Ying, Jonathan Poterjoy, Masashi Minamide
 
 ### How to use ###
-Following the user-guide of [PSU WRF-EnKF system](http://www.adapt.psu.edu/index.php?loc=outreach),
+Following the user-guide of [PSU WRF-EnKF system](http://www.adapt.psu.edu/index.php?loc=outreach)
 1. Unpackage, compile and place all necessary code packages in the proper directory
   - EnKF system code
   - The Advanced Weather Research and Forecasting model (WRF-ARW), compiled for normal(WRFV3) and preset moving nest(WRF_preset)
