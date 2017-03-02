@@ -149,7 +149,7 @@ subroutine  read_namelist(ix, jx, kx)
    datathin_radiance = 999
    hroi_radiance     = 999
    vroi_radiance     = 999
-
+   use_vroi_radiance_halfsfc  = .false.
  
 !------------------------------------------------------------------------
 !  [2.0] read namelist 

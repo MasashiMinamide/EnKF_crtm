@@ -158,9 +158,8 @@ module namelist_define
    logical       :: use_radiance        ! .true. : assimilated radiance 
    integer       :: datathin_radiance   ! 0=all data, 2=1/2 data, 10=1/10 radiance
    integer       :: hroi_radiance       ! horizontal radius of influence for radiance    
-   integer       :: vroi_radiance       ! vertical radius of influence for radiance  
-
-
+   integer       :: vroi_radiance       ! vertical radius of influence for radiance if use_vroi_radiance_halfsfc = .false.
+   logical       :: use_vroi_radiance_halfsfc ! .true. : VROI is set to (obs-level)*2, .false.:vroi_radiance is used
 
 !-- Namelist contents :
 
@@ -183,7 +182,7 @@ module namelist_define
    namelist /gpspw_obs      / use_gpspw, datathin_gpspw, hroi_gpspw, vroi_gpspw
    namelist /radar_obs      / radar_number, use_radar_rf, use_radar_rv, datathin_radar, hroi_radar, vroi_radar
    namelist /airborne_radar / use_airborne_rf, use_airborne_rv, datathin_airborne, hroi_airborne, vroi_airborne
-   namelist /radiance / use_radiance, datathin_radiance, hroi_radiance, vroi_radiance
+   namelist /radiance / use_radiance, datathin_radiance, hroi_radiance, vroi_radiance, use_vroi_radiance_halfsfc
 
 
 end module namelist_define
@@ -291,7 +290,7 @@ module obs_define
    type radiance_data_type
         integer                                    :: num
         character(len=12),allocatable,dimension(:) :: platform
-        real, allocatable,dimension(:)             :: lat, lon,ii, jj, tb, err
+        real, allocatable,dimension(:)             :: lat, lon,ii, jj, kk, tb, err
         integer, allocatable,dimension(:)          :: ch, hroi, hroi_d
    end type radiance_data_type
 

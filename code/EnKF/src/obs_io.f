@@ -89,7 +89,7 @@ endif
 !---edited by Minamide 2014.11.18
 ! Radiance data (satellite observation)
 if ( use_radiance ) then
-  if ( .not. use_ideal_obs  ) call get_radiance ( ix, jx, kx, proj, times )
+  if ( .not. use_ideal_obs  ) call get_radiance ( ix, jx, kx, p, proj, times )
 endif
 
 
@@ -949,7 +949,7 @@ end subroutine get_airborne
 
 !---edited by Minamide 2014.11.18 (for satellite data)
 !=======================================================================================
-  subroutine get_radiance ( ix, jx, kx, proj, times )
+  subroutine get_radiance ( ix, jx, kx, p, proj, times )
   use constants
   use namelist_define
   use mapinfo_define
@@ -961,17 +961,15 @@ end subroutine get_airborne
   implicit none
   type(proj_info), intent(in)         :: proj
   integer, intent(in)                 :: ix, jx, kx
-  real, dimension(ix, jx      )       :: xlong
-  real, dimension(ix, jx, kx+1)       :: ph
-  real, dimension(ix, jx, kx+1)       :: phb
+  real, dimension(ix, jx, kx), intent(in)  :: p
   character (len=80)                  :: radiance_file
   character (len=80)                  :: times
   character (len=12)                  :: so_time
   character (len=12)                  :: sat_id
-  integer                             :: i, n, iost, num
+  integer                             :: i, n, iost, num, k
   integer                             :: ch_info,hroi_rad,hroi_drad
-  real                                :: lat, lon, tb, err
-  real                                :: s, h, rx, ry, ir1, jr1, is, js
+  real                                :: lat, lon, tb, err, pres
+  real                                :: s, h, rx, ry, ir1, jr1, is, js, ks
 
   if ( my_proc_id == 0 ) then
     write(6, *)'   '
@@ -1009,6 +1007,7 @@ end subroutine get_airborne
      allocate( raw%radiance%ch( num ) )
      allocate( raw%radiance%ii( num ) )
      allocate( raw%radiance%jj( num ) )
+     allocate( raw%radiance%kk( num ) )
      allocate( raw%radiance%tb( num ) )
      allocate( raw%radiance%hroi( num ) )
      allocate( raw%radiance%hroi_d( num ) )
@@ -1020,10 +1019,20 @@ end subroutine get_airborne
      do_get_raw_data_loop : do
 
 !......... Enkf with odd data, and verify with even data
-        read(10, '(2a12,i12,3f12.3,2i12,f12.3)', iostat = iost ) so_time, sat_id, ch_info, lat, lon, tb, hroi_rad,hroi_drad,err
+        read(10,'(2a12,i12,3f12.3,2i12,2f12.3)',iostat=iost)so_time,sat_id,ch_info,lat,lon,tb,hroi_rad,hroi_drad,err,pres
         if( iost .ne. 0 ) exit
-!......... calculate radar center's position according to wrf domain grid
+!......... calculate horizontal position according to wrf domain grid
         call latlon_to_ij( proj, lat, lon, is, js )
+!......... calculate vertical position according to wrf domain grid
+        do k = 1, kx-1
+           if (p(is,js,1) <= pres) then
+              ks = 1.
+           else if ((p(is,js,k+1) <= pres).and.(pres < p(is,js,k))) then
+              ks = real(k)
+           else if (pres < p(is,js,kx)) then
+              ks = real(kx)
+           endif
+        enddo
 !......... evaluate
            if ( is > 2 .and. is < proj%nx-1 .and. js > 2 .and. js <proj%ny-1) then
               num = num + 1
@@ -1033,6 +1042,7 @@ end subroutine get_airborne
               raw%radiance%ch(num) = ch_info
               raw%radiance%ii(num) = is
               raw%radiance%jj(num) = js
+              raw%radiance%kk(num) = ks
               raw%radiance%tb(num) = tb
               raw%radiance%hroi(num) = (hroi_rad*1000)/proj%dx
               raw%radiance%hroi_d(num) = (hroi_drad*1000)/proj%dx
@@ -2320,7 +2330,7 @@ sta = 0
 do nr = 1, raw%radiance%num
    sta = sta + 1
 enddo
-allocate(data(sta,4))
+allocate(data(sta,5))
 allocate(data_sat(sta))
 allocate(data_ch(sta))
 allocate(data_hroi(sta))
@@ -2333,6 +2343,7 @@ do nr = 1, raw%radiance%num
     data(ista,2) = raw%radiance%err(nr)
     data(ista,3) = raw%radiance%ii(nr)
     data(ista,4) = raw%radiance%jj(nr)
+    data(ista,5) = raw%radiance%kk(nr)
     data_sat(ista) = raw%radiance%platform(nr)
     data_ch(ista)  = raw%radiance%ch(nr)
     data_hroi(ista)  = raw%radiance%hroi(nr)
@@ -2360,12 +2371,16 @@ do_reports : do n = start_data, ista,inter_data
   obs%err(obs%num)        = data(n,2)
   obs%position(obs%num,1) = data(n,3)
   obs%position(obs%num,2) = data(n,4)
+  obs%position(obs%num,3) = data(n,5)
   obs%sat(obs%num)        = data_sat(n)
   obs%ch(obs%num)         = data_ch(n)
   obs%roi(obs%num,1)      = data_hroi(n)*ngxn
   obs%roi(obs%num,3)      = data_hroi_d(n)*ngxn
-!  obs%roi(obs%num,1)      = 1
-  obs%roi(obs%num,2)      = vroi
+  if (use_vroi_radiance_halfsfc) then
+     obs%roi(obs%num,2)      = int(obs%position(obs%num,3)*2)
+  else
+     obs%roi(obs%num,2)      = vroi
+  endif
 end do do_reports
 
   return

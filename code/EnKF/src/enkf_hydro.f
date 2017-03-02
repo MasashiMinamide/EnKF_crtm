@@ -382,9 +382,9 @@ obs_assimilate_cycle : do it = 1,obs%num
    obstype = obs%type(iob)
    error = obs%err(iob)
    y_hxm = obs%dat(iob) - ya(iob,numbers_en+1)
-   if ( my_proc_id==0 ) write(*,'(a,i6,a,f10.2,a,f10.2,a,f8.2,a,f8.2,a,i4,a,i4)') &
+   if ( my_proc_id==0 ) write(*,'(a,i6,a,f10.2,a,f10.2,a,f8.2,a,f8.2,a,i4,a,i4,a,i2)') &
       'No.',iob,' '//obstype//' =',obs%dat(iob), ' ya=', ya(iob,numbers_en+1), ' y-ya=', y_hxm, &
-      ' err=',error,' hroi=',obs%roi(iob,1),' vroi=',obs%roi(iob,2)
+      ' err=',error,' hroi=',obs%roi(iob,1),' vroi=',obs%roi(iob,2),'at z',int(obs%position(iob,3))
    if( abs(y_hxm)>(error*5.) .and. &
       .not.(obstype=='min_slp   ' .or. obstype=='longtitude' .or. obstype=='latitude  ' .or. obstype=='slp       '&
        .or. obstype=='Radiance  ') ) then
