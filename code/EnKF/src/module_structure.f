@@ -160,6 +160,7 @@ module namelist_define
    integer       :: hroi_radiance       ! horizontal radius of influence for radiance    
    integer       :: vroi_radiance       ! vertical radius of influence for radiance if use_vroi_radiance_halfsfc = .false.
    logical       :: use_vroi_radiance_halfsfc ! .true. : VROI is set to (obs-level)*2, .false.:vroi_radiance is used
+   logical       :: use_aoei            ! .true. : apply Adaptive Observation Error Inflation
 
 !-- Namelist contents :
 
@@ -182,7 +183,7 @@ module namelist_define
    namelist /gpspw_obs      / use_gpspw, datathin_gpspw, hroi_gpspw, vroi_gpspw
    namelist /radar_obs      / radar_number, use_radar_rf, use_radar_rv, datathin_radar, hroi_radar, vroi_radar
    namelist /airborne_radar / use_airborne_rf, use_airborne_rv, datathin_airborne, hroi_airborne, vroi_airborne
-   namelist /radiance / use_radiance, datathin_radiance, hroi_radiance, vroi_radiance, use_vroi_radiance_halfsfc
+   namelist /radiance / use_radiance, datathin_radiance, hroi_radiance, vroi_radiance, use_vroi_radiance_halfsfc,use_aoei
 
 
 end module namelist_define

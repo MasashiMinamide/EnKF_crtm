@@ -86,6 +86,7 @@
  REPLACE_MEAN=false
  REPLACE_MEAN_WITH=gfs
  REPLACE_ENVIRONMENT=true
+ USE_AOEI=true
 
 #data sources (used for both EnKF and WRFDA)
  INCLUDE_LITTLE_R=true

@@ -415,7 +415,7 @@ obs_assimilate_cycle : do it = 1,obs%num
 ! cycle through variables to process, in x, 2D variables are stored in 3D form (with values only on
 ! k=1), when sending them among cpus, only the lowest layer (:,:,1) are sent and received.
    ! --- Use Adaptive Observation Error Inflation (AOEI) Minamide and Zhang (2016) MWR for BT assimilation
-   if (obstype=='Radiance  ') then
+   if (obstype=='Radiance  ' .and. use_aoei) then
       d = max(fac * var + error * error, y_hxm * y_hxm)
       alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
       if ( my_proc_id == 0 .and. sqrt(d-fac * var) > error)&
@@ -762,7 +762,7 @@ enddo update_x_var
       d    = fac * var + error * error
       alpha= 1.0/(1.0+sqrt(error*error/d))
    ! --- AOEI for BT
-   if (obstype=='Radiance  ') then
+   if (obstype=='Radiance  ' .and. use_aoei) then
       d = max(fac * var + error * error, y_hxm * y_hxm)
       alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
    endif

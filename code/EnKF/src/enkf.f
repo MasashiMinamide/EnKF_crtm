@@ -434,10 +434,12 @@ t0=MPI_Wtime()
        endif
      endif
      ! --- Use Adaptive Observation Error Inflation (AOEI) Minamide and Zhang (2016) MWR for BT assimilation
-     d = max(fac * var + error * error, y_hxm * y_hxm)
-     alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
-     if ( my_proc_id == 0 .and. sqrt(d-fac * var) > error .and. varname=='U         ')&
-          write(*,*) 'observation-error inflated to ',sqrt(d-fac * var)
+     if (use_aoei) then
+       d = max(fac * var + error * error, y_hxm * y_hxm)
+       alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
+       if ( my_proc_id == 0 .and. sqrt(d-fac * var) > error .and. varname=='U         ')&
+            write(*,*) 'observation-error inflated to ',sqrt(d-fac * var)
+     endif 
      ! --- AOEI end
    endif
    if ( update_flag==0 ) cycle update_x_var
@@ -773,7 +775,7 @@ enddo update_x_var
       d    = fac * var + error * error
       alpha= 1.0/(1.0+sqrt(error*error/d))
    ! --- AOEI for BT
-   if (obstype=='Radiance  ') then
+   if (obstype=='Radiance  ' .and. use_aoei) then
       d = max(fac * var + error * error, y_hxm * y_hxm)
       alpha = 1.0/(1.0+sqrt((d-fac * var)/d))
    endif
