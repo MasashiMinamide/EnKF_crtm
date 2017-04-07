@@ -158,6 +158,7 @@ vroi_radiance = $VROI_RADIANCE,
 datathin_radiance = $THIN_RADIANCE,
 use_vroi_radiance_halfsfc = .$USE_VROI_RADIANCE_HALFSFC.,
 use_aoei      = .$USE_AOEI.,
+use_elf       = .$USE_ELF.,
 /
 
 EOF
