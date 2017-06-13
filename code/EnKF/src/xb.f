@@ -1094,8 +1094,8 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   do iob = ystart, yend
      obs_ii=lon_radiance(iob)
      obs_jj=lat_radiance(iob)
-     x = int( obs_ii )
-     y = int( obs_jj )
+     x = nint( obs_ii )
+     y = nint( obs_jj )
 
   ! 4a3. Converting WRF data for CRTM structure
   ! --------------------------------
@@ -1304,8 +1304,8 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   do iob = iob_radmin, iob_radmax
      obs_ii=obs%position(iob,1)
      obs_jj=obs%position(iob,2)
-     x = int( obs_ii )
-     y = int( obs_jj )
+     x = nint( obs_ii )
+     y = nint( obs_jj )
      if (Sensor_Id == 'abi_gr' .or. Sensor_Id == 'ahi_h8' ) then
          if (obs%ch(iob) .eq. 8) xb_tb(iob) = Tb(x,y,1) !6.19um
          if (obs%ch(iob) .eq. 9) xb_tb(iob) = Tb(x,y,2) !6.95um
