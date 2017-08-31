@@ -876,7 +876,7 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   !====================
   !setup for GOES-ABI
    REAL, PARAMETER :: sat_h=35780000.0
-   REAL, PARAMETER :: sat_lon=140.0/180.0*3.14159
+   REAL :: sat_lon
   !====================
 !  INTEGER, intent(in) :: ix = ix  !total number of the x-grid
 !  INTEGER, parameter, intent(in) :: jx = jx  !total number of the y-grid
@@ -974,7 +974,13 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   ! -----------------------
   !It assumes that all the Radiance data is same sattelite as the first data.
   Sensor_Id = trim(adjustl(obs%sat(iob_radmin)))
-  
+ 
+  if (Sensor_Id == 'ahi_h8' .or. Sensor_Id == 'ahi_himawari8') then
+     sat_lon = 140.0/180.0*3.14159
+  else if (Sensor_Id == 'abi_gr' .or. Sensor_Id == 'imgr_g13') then
+     sat_lon = -75.0/180.0*3.14159
+  endif
+ 
   ! ============================================================================
   ! 2. **** INITIALIZE THE CRTM ****
   !
