@@ -13,8 +13,8 @@
 . $CONFIG_FILE
 
 date1=$1
-#date2=$2
-date2=$DATE_END
+date2=$2
+#date2=$DATE_END
 outfile=$3
 
 # Find tcvitals data that covers the period

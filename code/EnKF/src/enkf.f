@@ -162,9 +162,12 @@ real, allocatable, dimension(:,:,:)   :: km, kmsend, km1, km1send
 real, allocatable, dimension(:,:,:,:) :: x1
 ! for satellite radiance
 integer :: iob_radmin,iob_radmax
-real, dimension(obs%num) :: yasend_tb, yfm_radiance, yam_radiance
+real, dimension(obs%num) :: yasend_tb, yfm_radiance, yam_radiance, yasend_nc, ya_tb, ya_nc, ya_ca
 real, dimension(ni,nj,nk)     :: xq_n,xq_p
 real, dimension(ni,nj,nk,nm)  :: xq_nsend,xq_psend
+! Empirical Localization Functions
+integer :: n_r=101
+integer :: ich, iob_satch,num_satch
 
 
 read(wrf_file(6:10),'(i5)')iunit
@@ -210,7 +213,6 @@ if ( use_simulated .or. use_ideal_obs ) then
    if ( expername .eq. 'hurricane ' ) &
       call hurricane_center_shift(filename,ix,jx,kx,xlong,xlat,znu,znw,proj,times)
 endif
-
 
 assimilated_obs_num = 0
 if( obs%num > 0 ) then !!=======================================================
@@ -331,11 +333,17 @@ if(raw%radiance%num.ne.0) then
   do ie = 1, numbers_en+1
     yasend_tb = 0.0
     write( filename, '(a5,i5.5)') wrf_file(1:5), iunit+ie-1
-    call xb_to_radiance(filename,proj,ix,jx,kx,xlong,xlat,xland,iob_radmin,iob_radmax,yasend_tb)
+    call xb_to_radiance(filename,proj,ix,jx,kx,xlong,xlat,xland,iob_radmin,iob_radmax,yasend_tb,.true.)
     yasend(iob_radmin:iob_radmax,ie) = yasend_tb(iob_radmin:iob_radmax)
+    if (ie == numbers_en+1 .and. use_elf) then
+       call xb_to_radiance(filename,proj,ix,jx,kx,xlong,xlat,xland,iob_radmin,iob_radmax,yasend_tb,.false.)
+       yasend_nc(iob_radmin:iob_radmax) = yasend_tb(iob_radmin:iob_radmax)
+    endif
   enddo
 endif
 call MPI_Allreduce(yasend,ya,obs%num*(numbers_en+1),MPI_REAL,MPI_SUM,comm,ierr)
+if (use_elf) call MPI_Allreduce(yasend_nc,ya_nc,obs%num,MPI_REAL,MPI_SUM,comm,ierr)
+ya_ca = (abs(obs%dat-ya_nc)+abs(ya(:,numbers_en+1)-ya_nc))/2.
 
 !calcurate mean of ya (radmean) by Minamide 2015.9.25 > 2016.12.6
 yfm_radiance = 0
@@ -403,6 +411,7 @@ obs_assimilate_cycle : do it = 1,obs%num
    fac  = 1./real(numbers_en-1) 
    d    = fac * var + error * error 
    alpha = 1.0/(1.0+sqrt(error*error/d))
+
 !--------------------------------------------------------------------------------------------------
 ! cycle through variables to process, in x, 2D variables are stored in 3D form (with values only on
 ! k=1), when sending them among cpus, only the lowest layer (:,:,1) are sent and received.
@@ -413,12 +422,14 @@ t0=MPI_Wtime()
    do iv = 1, num_update_var
      if ( varname .eq. updatevar(iv) ) update_flag = 1
    enddo
+   if ( update_flag==0 ) cycle update_x_var
 !
    d    = fac * var + error * error
    alpha = 1.0/(1.0+sqrt(error*error/d))
-   ! --- for Successive Covariance Localization
    ngx = obs%roi(iob,1)
+   ngz = obs%roi(iob,2)
    if (obstype=='Radiance  ') then
+     ! --- Use Successive Covariance Localization (SCL) Zhang et al. (2009) MWR for BT assimilation
      if(varname=='QCLOUD    ' .or. varname=='QRAIN     ' .or. varname=='QICE      ' .or. & !varname=='QVAPOR    ' .or. 
                varname=='QGRAUP    ' .or. varname=='QSNOW     ') then
        if(obs%roi(iob,1) == 0) then
@@ -433,6 +444,8 @@ t0=MPI_Wtime()
          ngx = obs%roi(iob,3)
        endif
      endif
+     ! --- SCL end
+     !
      ! --- Use Adaptive Observation Error Inflation (AOEI) Minamide and Zhang (2016) MWR for BT assimilation
      if (use_aoei) then
        d = max(fac * var + error * error, y_hxm * y_hxm)
@@ -441,6 +454,15 @@ t0=MPI_Wtime()
             write(*,*) 'observation-error inflated to ',sqrt(d-fac * var)
      endif 
      ! --- AOEI end
+     !
+     ! --- Use Empirical Localization Functions (ELFs)
+     if (use_elf) then
+       call corr_elf(varname, obs%sat(iob), obs%ch(iob), ya_ca(iob), ngx, ngz, obs%position(iob,3))
+       if ( my_proc_id==0 .and. (varname=='U         '.or.varname=='V         '.or.varname=='QVAPOR    ')) &
+           write(*,*) varname, ya_ca(iob), ngx, ngz, obs%position(iob,3)
+     endif
+     if (ngx == 0 .or. ngz == 0) update_flag = 0
+     ! --- ELFs end
    endif
    if ( update_flag==0 ) cycle update_x_var
 
@@ -890,7 +912,6 @@ else !!=======================================================================
 
 
 endif !!======================================================================
-
 
 if ( my_proc_id==0 ) write(*,*)'Number of assimilated obs =',assimilated_obs_num
 
