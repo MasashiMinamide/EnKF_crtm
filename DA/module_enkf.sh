@@ -42,7 +42,7 @@ for n in $domlist; do
   # coefficients for CRTM
   ln -fs $CRTM_DIR/crtm_wrf/coefficients .
   # Empirical Localization Function
-  ln -fs $ELF_DIR/elf .
+  #ln -fs $ELF_DIR/elf .
   #Observations
   #LITTLE_R format from obsproc
   ln -fs $DATA_DIR/obs/${DATE:0:4}/obs_gts_`wrf_time_string $DATE`.3DVAR obs_3dvar_${DATE}00
