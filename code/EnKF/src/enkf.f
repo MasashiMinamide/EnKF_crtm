@@ -168,6 +168,14 @@ real, dimension(ni,nj,nk,nm)  :: xq_nsend,xq_psend
 ! Empirical Localization Functions
 integer :: n_r=101
 integer :: ich, iob_satch,num_satch
+! parameter estimation
+real    :: dab_dob,doa_dob,dob_dob_r,tr_hph,inflate_update,error_update
+integer :: iost,update_file
+real    :: sigma_infb, sigma_infa, inflate_o, inflate_b, error_tmp
+real, parameter :: kappa_inf = 1.03
+real, parameter :: sigma_info = 1.0
+real, parameter :: sigma_inf_min = 0.6
+real, parameter :: sigma_inf_default = 1.0
 
 
 read(wrf_file(6:10),'(i5)')iunit
@@ -833,13 +841,17 @@ m_d2=0.0
 m_var_b=0.0
 m_var_a=0.0
 n=0
+tr_hph = 0.
+doa_dob = 0.
+dab_dob = 0.
+dob_dob_r = 0.
 do iob=1,obs%num
   call ij_to_latlon(proj, obs%position(iob,1), obs%position(iob,2), center_xb(1), center_xb(2))
   var_a=0.0
   var_b=0.0
   do ie=1,numbers_en
-    var_a=var_a+(ya(iob,ie)-yam_radiance(iob))**2
-    var_b=var_b+(yf(iob,ie)-yfm_radiance(iob))**2
+    var_a=var_a+(ya(iob,ie)-ya(iob,numbers_en+1))**2
+    var_b=var_b+(yf(iob,ie)-yf(iob,numbers_en+1))**2
   enddo
   var_a=var_a/real(numbers_en-1)
   var_b=var_b/real(numbers_en-1)
@@ -870,6 +882,26 @@ do iob=1,obs%num
     m_var_b=m_var_b+var_b/(obs%err(iob)**2)
     m_var_a=m_var_a+var_a/(obs%err(iob)**2)
   endif
+
+  !!! Estimate inflation and observation error by Minamide 2015.4.4
+  obstype = obs%type(iob)
+  if (obstype=='Radiance  ') then
+    var=0.
+    do ie=1,numbers_en
+       hxa(ie) = yf(iob,ie)-yfm_radiance(iob) !yf(iob,numbers_en+1)
+       var     = var + hxa(ie)*hxa(ie)
+    enddo
+    fac  = 1./real(numbers_en-1)
+    d    = fac * var + error * error
+    ! for inflation
+    dab_dob = dab_dob + (ya(iob,numbers_en+1)-yf(iob,numbers_en+1))*(obs%dat(iob)-yf(iob,numbers_en+1))
+    dob_dob_r = dob_dob_r + (obs%dat(iob)-yf(iob,numbers_en+1))*(obs%dat(iob)-yf(iob,numbers_en+1)) - error*error
+    tr_hph = tr_hph + fac*var
+    ! for observation error
+    doa_dob = doa_dob + (obs%dat(iob) - ya(iob,numbers_en+1))*(obs%dat(iob)-yf(iob,numbers_en+1))
+  endif
+  !!!! 
+
 end do
 m_d2=m_d2/real(n)
 m_var_b=m_var_b/real(n)
@@ -897,6 +929,46 @@ if ( my_proc_id==0 ) write(*,*)'Performing covariance relaxation...'
 !  if(ie==numbers_en+1) &
 !    x(:,:,:,:,n)=x(:,:,:,:,n)*(mixing*(std_xf-std_x)/std_x+1)
 !enddo
+
+!!! estimating parameters
+if ( my_proc_id == 0 ) write(*,*)'estimated inflate OMB^2=',dob_dob_r/tr_hph,'AMB*OMB=',dab_dob/tr_hph
+if (tr_hph == 0.) then
+   inflate_o = inflate
+else
+   !!OMB^2
+   inflate_o = dob_dob_r / tr_hph
+   !!AMB*OMB
+   !inflate_o = dab_dob / tr_hph
+endif
+error_update = sqrt(doa_dob/real(obs%num))
+if ( my_proc_id == 0 ) write(*,'(a,f12.4,a,f12.4)')' estimated inflation =',inflate_o, ', obs_error = ',error_update
+if (inflate_o .lt. 1.) inflate_o = 1.
+!if (inflate_o .gt. 1.2**2) inflate_o = 1.2**2
+
+
+!!! adaptively update inflation factor 2017.9.5
+! reading previous time cycle estimation
+open (11, file = 'parameters_update', status = 'old', form = 'formatted', iostat = iost )
+if( iost .eq. 0 ) then
+  read(11,fmt='(f12.4,f12.4,f12.4)')inflate_b, error_tmp, sigma_infb
+  sigma_infb = sigma_infb * kappa_inf ! spread increase with forecast
+else
+  inflate_b = inflate
+  sigma_infb = sigma_inf_default
+endif
+if (sigma_infb .lt. sigma_inf_min) sigma_infb = sigma_inf_min
+! scalar KF 
+inflate_update = (sigma_info*inflate_b + sigma_infb*inflate_o) / (sigma_info + sigma_infb)
+sigma_infa = (1. - sigma_infb/(sigma_info + sigma_infb))*sigma_infb
+if ( my_proc_id == 0 ) write(*,'(a,f12.4,a,f12.4)')' adaptivelty updated inflation =', inflate_update
+!!!
+
+if ( my_proc_id == 0 ) then
+  open(11,file='parameters_update'//times(1:4)//times(6:7)//times(9:10)//times(12:13)//times(15:16))
+  write(11,'(f12.4,f12.4,f12.4)')inflate_update,error_update,sigma_infa
+  close(11)
+endif
+!!! parameter estimation end
 
 
 else !!=======================================================================
