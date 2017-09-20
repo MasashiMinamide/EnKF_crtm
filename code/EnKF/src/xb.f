@@ -838,7 +838,7 @@ end subroutine xb_to_slp
 
 
 !=======================================================================================
-subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin,iob_radmax,xb_tb)
+subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin,iob_radmax,xb_tb,use_cloud)
 
 !---------------------
 ! radiance subroutine calculates brightness temperature for satellite channels
@@ -859,6 +859,7 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   integer, intent(out)                     :: iob_radmin,iob_radmax
   character(len=10), intent(in)            :: inputfile
   type(proj_info), intent(in)              :: proj                   ! 1st guestmap info
+  logical, intent(in)                      :: use_cloud
   real, dimension(obs%num), intent(out)    :: xb_tb
   real, dimension(ix, jx ), intent(in)     :: xlong
   real, dimension(ix, jx ), intent(in)     :: xlat
@@ -874,7 +875,7 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   REAL, PARAMETER :: Cpd=7.D0*R_D/2.D0
   REAL, PARAMETER :: Re=6378000.0
   !====================
-  !setup for GOES-ABI
+  !setup for geostationary satellites
    REAL, PARAMETER :: sat_h=35780000.0
    REAL :: sat_lon
   !====================
@@ -980,7 +981,6 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   else if (Sensor_Id == 'abi_gr' .or. Sensor_Id == 'imgr_g13') then
      sat_lon = -75.0/180.0*3.14159
   endif
- 
   ! ============================================================================
   ! 2. **** INITIALIZE THE CRTM ****
   !
@@ -1067,14 +1067,23 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
   call get_variable3d(inputfile,'PHB',ix,jx,kx+1,1,phb)
   call get_variable3d(inputfile,'T',ix,jx,kx,1,t)
   call get_variable3d(inputfile,'QVAPOR',ix,jx,kx,1,qvapor)
-  call get_variable3d(inputfile,'QCLOUD',ix,jx,kx,1,qcloud)
-  call get_variable3d(inputfile,'QRAIN',ix,jx,kx,1,qrain)
-  call get_variable3d(inputfile,'QICE',ix,jx,kx,1,qice)
-  call get_variable3d(inputfile,'QSNOW',ix,jx,kx,1,qsnow)
-  call get_variable3d(inputfile,'QGRAUP',ix,jx,kx,1,qgraup)
   call get_variable2d(inputfile,'PSFC',ix,jx,1,psfc)
   call get_variable2d(inputfile,'TSK',ix,jx,1,tsk)
   call get_variable2d(inputfile,'HGT',ix,jx,1,hgt)
+  if (use_cloud) then
+     call get_variable3d(inputfile,'QCLOUD',ix,jx,kx,1,qcloud)
+     call get_variable3d(inputfile,'QRAIN',ix,jx,kx,1,qrain)
+     call get_variable3d(inputfile,'QICE',ix,jx,kx,1,qice)
+     call get_variable3d(inputfile,'QSNOW',ix,jx,kx,1,qsnow)
+     call get_variable3d(inputfile,'QGRAUP',ix,jx,kx,1,qgraup)
+  else
+     qcloud = 0.
+     qrain = 0.
+     qice = 0.
+     qsnow = 0.
+     qgraup = 0.
+  endif
+
   lat = xlat/180.0*3.14159
   lon = xlong/180.0*3.14159
   pres = P + PB
@@ -1126,6 +1135,7 @@ subroutine xb_to_radiance(inputfile,proj,ix,jx,kx,xlong,xlat,landmask,iob_radmin
     delz(z) = ((PH(x,y,z+1) + PHB(x,y,z+1))-(PH(x,y,z) + PHB(x,y,z)))/2/9.806
    endif
   enddo
+  if (delz(1) <= 0.) delz(1) = delz(2)
   !---Atmospheric Profile
   atm(1)%Climatology         = TROPICAL
   atm(1)%Absorber_Id(1:2)    = (/ H2O_ID, O3_ID /)

@@ -1,7 +1,7 @@
 FC=mpif90
 FCFLAG=-f90=ifort -i4 -w -ftz -align all -fno-alias -fp-model precise -assume realloc_lhs -convert big_endian -traceback
 
-all: enkf.mpi enkf_hydro.mpi replace_perturbationmean_by_initial.exe replace_geo_by_initial.exe replace_xfmean_with_gfs.exe enkf_gfs_hybrid_inflation.exe soairborne_to_3dvar.exe so_to_3dvar.exe ensemble_mean.exe replace_mean.exe replace_environment_by_gfs.exe replace_mean_outside_site.exe replace_environment_by_gfs.exe 
+all: enkf.mpi enkf_hydro.mpi replace_perturbationmean_by_initial.exe replace_geo_by_initial.exe replace_xfmean_with_gfs.exe enkf_gfs_hybrid_inflation.exe soairborne_to_3dvar.exe so_to_3dvar.exe ensemble_mean.exe replace_mean.exe replace_environment_by_gfs.exe replace_mean_outside_site.exe replace_environment_by_gfs.exe cal_inflate.mpi
 
 clean:
 	rm -f *.o *.mod *.mpi *.exe
@@ -40,6 +40,7 @@ replace_mean.o:
 	$(FC) -c $(FCFLAG) -FR replace_mean.f
 replace_environment_by_gfs.o:
 	$(FC) -c $(FCFLAG) -FR replace_environment_by_gfs.f
+
 
 enkf.mpi: module_structure.o mpi_module.o module_netcdf.o module_map_utils.o module_wrf_tools.o module_radar.o cal_roi.o hurricane_center.o obs_io.o xb.o sub_enkf_util.o enkf.o
 	$(FC) -o enkf.mpi $(FCFLAG) -FR -I$(NETCDF)/include  module_structure.o mpi_module.o module_netcdf.o module_map_utils.o module_wrf_tools.o module_radar.o cal_roi.o hurricane_center.o obs_io.o xb.o sub_enkf_util.o enkf.o -L$(CRTM_DIR)/lib -lCRTM -L$(NETCDF)/lib -lnetcdf -lnetcdff main.f
@@ -80,3 +81,7 @@ replace_environment_by_gfs.exe: module_netcdf.o mpi_module.o
 wrf2obs3dvar: module_netcdf.o module_map_utils.o module_structure.o module_wrf_tools.o
 	rm -f wrf2obs3dvar.exe
 	$(FC) -o wrf2obs3dvar.exe $(FCFLAG) -FR -I$(NETCDF)/include module_netcdf.o module_map_utils.o module_structure.o module_wrf_tools.o -L$(NETCDF)/lib -lnetcdf -lnetcdff wrf2obs3dvar.f #time_calculation.f
+
+cal_inflate.mpi: module_structure.o mpi_module.o module_netcdf.o module_map_utils.o module_wrf_tools.o sub_enkf_util.o
+	$(FC) -o cal_inflate.mpi $(FCFLAG) -FR -I$(NETCDF)/include  module_structure.o mpi_module.o module_netcdf.o module_map_utils.o module_wrf_tools.o sub_enkf_util.o -L$(CRTM_DIR)/lib -lCRTM -L$(NETCDF)/lib -lnetcdf -lnetcdff cal_inflate.f
+

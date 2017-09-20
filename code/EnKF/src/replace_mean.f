@@ -86,10 +86,10 @@
    allocate( gfs   ( ii, jj, kk ) )
    allocate( dat3d ( ii, jj, kk ) )
    allocate( work  ( ii, jj, kk ) )
-   allocate( xq_p  ( ii, jj, kk ) )
-   allocate( xq_n  ( ii, jj, kk ) )
-   allocate( xq_psend    ( ii, jj, kk, nmi ) )
-   allocate( xq_nsend    ( ii, jj, kk, nmi ) )
+   !allocate( xq_p  ( ii, jj, kk ) )
+   !allocate( xq_n  ( ii, jj, kk ) )
+   !allocate( xq_psend    ( ii, jj, kk, nmi ) )
+   !allocate( xq_nsend    ( ii, jj, kk, nmi ) )
 
 !.... get gfs initial 
    if ( kk > 1 ) then
@@ -118,7 +118,6 @@
 
   CALL MPI_Allreduce(sum(xa,4),work,ii*jj*kk,MPI_REAL,MPI_SUM,comm,ierr)
   xm = work/float(numbers_en)
-  if ( my_proc_id == 0 ) write(*,*)'nmi=',nmi,'xq-mean ',minval(xm),'~',maxval(xm)
   work = 0.
 
 !.... replace xm by gfs
@@ -130,33 +129,33 @@
   endif
   end do
 
-!!! Removing negative Q-value by Minamide 2015.5.26 
-  if (var=='QCLOUD    ' .or. var=='QRAIN     ' .or. var=='QICE      ' .or. &
-      var=='QGRAUP    ' .or. var=='QSNOW     ') then 
-   xq_p = 0.
-   xq_n = 0.
-   xq_psend = 0.
-   xq_nsend = 0.
-   do n=1,nmi !mstart,mend
-    ie = (n-1)*nprocs+my_proc_id+1
-    if (ie <= numbers_en) then
-     where(work >= 0.) xq_psend(:,:,:,n) = work
-     where(work < 0.) xq_nsend(:,:,:,n) = work
-    endif
-   enddo
-   call MPI_Allreduce(sum(xq_psend,4),xq_p,ii*jj*kk,MPI_REAL,MPI_SUM,comm,ierr)
-   call MPI_Allreduce(sum(xq_nsend,4),xq_n,ii*jj*kk,MPI_REAL,MPI_SUM,comm,ierr)
-   if( my_proc_id == 0 ) write(*,*)'original xq value',minval(work),'~',maxval(work)
-   do n=1,nmi
-    ie = (n-1)*nprocs+my_proc_id+1
-    if(ie<=numbers_en) then
-      where(work < 0.) work = 0.
-      where(xq_p >= abs(xq_n).and.xq_p > 0.) work = work*(xq_p+xq_n)/xq_p
-      where(xq_p < abs(xq_n).or. xq_p == 0.)  work = 0.
-    endif
-   enddo
-   if( my_proc_id == 0 ) write(*,*)'non-negative xq value',minval(work),'~',maxval(work)
-  endif
+!!!! Removing negative Q-value by Minamide 2015.5.26 
+!  if (var=='QCLOUD    ' .or. var=='QRAIN     ' .or. var=='QICE      ' .or. &
+!      var=='QGRAUP    ' .or. var=='QSNOW     ') then 
+!   xq_p = 0.
+!   xq_n = 0.
+!   xq_psend = 0.
+!   xq_nsend = 0.
+!   do n=1,nmi !mstart,mend
+!    ie = (n-1)*nprocs+my_proc_id+1
+!    if (ie <= numbers_en) then
+!     where(work >= 0.) xq_psend(:,:,:,n) = work
+!     where(work < 0.) xq_nsend(:,:,:,n) = work
+!    endif
+!   enddo
+!   call MPI_Allreduce(sum(xq_psend,4),xq_p,ii*jj*kk,MPI_REAL,MPI_SUM,comm,ierr)
+!   call MPI_Allreduce(sum(xq_nsend,4),xq_n,ii*jj*kk,MPI_REAL,MPI_SUM,comm,ierr)
+!   if( my_proc_id == 0 ) write(*,*)'original xq value',minval(work),'~',maxval(work)
+!   do n=1,nmi
+!    ie = (n-1)*nprocs+my_proc_id+1
+!    if(ie<=numbers_en) then
+!      where(work < 0.) work = 0.
+!      where(xq_p >= abs(xq_n).and.xq_p > 0.) work = work*(xq_p+xq_n)/xq_p
+!      where(xq_p < abs(xq_n).or. xq_p == 0.)  work = 0.
+!    endif
+!   enddo
+!   if( my_proc_id == 0 ) write(*,*)'non-negative xq value',minval(work),'~',maxval(work)
+!  endif
 
   do n=1,nmi !mstart,mend
   ie = (n-1)*nprocs+my_proc_id+1
@@ -179,10 +178,10 @@
   deallocate( gfs   )
   deallocate( dat3d )
   deallocate( work  )
-  deallocate( xq_p  )
-  deallocate( xq_n  )
-  deallocate( xq_psend  )
-  deallocate( xq_nsend  )
+  !deallocate( xq_p  )
+  !deallocate( xq_n  )
+  !deallocate( xq_psend  )
+  !deallocate( xq_nsend  )
   call mpi_barrier(comm,ierr)
 
  end do do_wrf_var

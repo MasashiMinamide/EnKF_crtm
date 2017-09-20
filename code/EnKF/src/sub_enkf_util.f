@@ -151,6 +151,7 @@ subroutine  read_namelist(ix, jx, kx)
    vroi_radiance     = 999
    use_vroi_radiance_halfsfc  = .false.
    use_aoei          = .true.
+   use_elf           = .false.
  
 !------------------------------------------------------------------------
 !  [2.0] read namelist 

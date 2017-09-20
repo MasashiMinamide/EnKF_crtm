@@ -126,7 +126,8 @@ dy         = `for i in $domlist; do printf ${DY[$i-1]}, ; done`
 mp_physics         = `for i in $domlist; do printf ${MP_PHYSICS[$i-1]}, ; done`
 sf_sfclay_physics  = `for i in $domlist; do printf ${SF_SFCLAY_PHYSICS[$i-1]}, ; done`
 sf_surface_physics = `for i in $domlist; do printf ${SF_SURFACE_PHYSICS[$i-1]}, ; done`
-num_soil_layers    = 5,
+num_soil_layers    = 4,
+num_land_cat       = 21,
 /
 &fdda
 /

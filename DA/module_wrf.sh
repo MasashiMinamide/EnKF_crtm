@@ -62,8 +62,11 @@ for re_run in `seq 1 3`; do
   export inputout_end=$run_minutes_cycle
   export GET_PHYS_FROM_FILE=false
   $SCRIPT_DIR/namelist_wrf.sh wrfw > namelist.input
-  #$SCRIPT_DIR/job_submit.sh $wrf_ntasks 0 $HOSTPPN ./wrf.exe >& wrf.log
-  $SCRIPT_DIR/job_submit.sh `expr $wrf_ntasks - $HOSTPPN` 0 $HOSTPPN ./wrf.exe >& wrf.log &
+  if [[ $wrf_ntasks -gt $HOSTPPN ]]; then
+     $SCRIPT_DIR/job_submit.sh `expr $wrf_ntasks - $HOSTPPN` 0 $HOSTPPN ./wrf.exe >& wrf.log &
+  else
+     $SCRIPT_DIR/job_submit.sh $wrf_ntasks 0 $HOSTPPN ./wrf.exe >& wrf.log
+  fi
 wait
 done
 
